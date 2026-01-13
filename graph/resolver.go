@@ -1,43 +1,47 @@
 package graph
 
-// THIS CODE WILL BE UPDATED WITH SCHEMA CHANGES. PREVIOUS IMPLEMENTATION FOR SCHEMA CHANGES WILL BE KEPT IN THE COMMENT SECTION. IMPLEMENTATION FOR UNCHANGED SCHEMA WILL BE KEPT.
-
 import (
-	"context"
-	"turtle/graph/generated"
+	"fmt"
+	"time"
+
+	"turtle/db"
 	"turtle/graph/model"
+	"turtle/models"
 	"turtle/pkg/jwt"
-	"turtle/services/auth"
 )
+
+// This file will not be regenerated automatically.
+// It serves as dependency injection for your app, add any dependencies you require here.
 
 type Resolver struct{}
 
-// SocialLogin is the resolver for the socialLogin field.
-func (r *mutationResolver) SocialLogin(ctx context.Context, provider model.Provider, providerToken string) (*model.AuthPayload, error) {
-	user := auth.SocialLogin(provider.String(), providerToken)
-	token, _ := jwt.GenerateToken(user.ID)
-	return &model.AuthPayload{Token: token}, nil
+// createAuthSession creates a new authentication session for a user
+func (r *Resolver) createAuthSession(user *models.User, device string) (*model.AuthPayload, error) {
+
+    // Validate device
+    if !IsValidDevice(device) {
+        return nil, ErrInvalidDevice
+    }
+
+    // Generate token pair
+    access, refresh := jwt.GeneratePair(user.ID, user.Role, device)
+
+    // Create refresh token session
+    session := &models.RefreshToken{
+        UserID:    user.ID,
+        Token:     refresh,
+        Device:    device,
+        ExpiresAt: time.Now().Add(RefreshTokenTTL),
+    }
+
+    if err := db.DB.Create(session).Error; err != nil {
+        return nil, fmt.Errorf("failed to create session: %w", err)
+    }
+
+    return &model.AuthPayload{
+        AccessToken:  access,
+        RefreshToken: refresh,
+        UserID:       int(user.ID),
+        Role:         user.Role,
+    }, nil
 }
-
-func (r *queryResolver) Health(ctx context.Context) (string, error) {
-	return "ok", nil
-}
-
-// Mutation returns generated.MutationResolver implementation.
-func (r *Resolver) Mutation() generated.MutationResolver { return &mutationResolver{r} }
-
-// Query returns generated.QueryResolver implementation.
-func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
-
-type mutationResolver struct{ *Resolver }
-type queryResolver struct{ *Resolver }
-
-// !!! WARNING !!!
-// The code below was going to be deleted when updating resolvers. It has been copied here so you have
-// one last chance to move it out of harms way if you want. There are two reasons this happens:
-//  - When renaming or deleting a resolver the old code will be put in here. You can safely delete
-//    it when you're done.
-//  - You have helper methods in this file. Move them out to keep these resolver files clean.
-/*
-	type Resolver struct{}
-*/

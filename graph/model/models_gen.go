@@ -10,7 +10,10 @@ import (
 )
 
 type AuthPayload struct {
-	Token string `json:"token"`
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+	UserID       int    `json:"userId"`
+	Role         string `json:"role"`
 }
 
 type Mutation struct {
@@ -19,23 +22,78 @@ type Mutation struct {
 type Query struct {
 }
 
+type DeviceType string
+
+const (
+	DeviceTypeMobile  DeviceType = "MOBILE"
+	DeviceTypeWeb     DeviceType = "WEB"
+	DeviceTypeDesktop DeviceType = "DESKTOP"
+)
+
+var AllDeviceType = []DeviceType{
+	DeviceTypeMobile,
+	DeviceTypeWeb,
+	DeviceTypeDesktop,
+}
+
+func (e DeviceType) IsValid() bool {
+	switch e {
+	case DeviceTypeMobile, DeviceTypeWeb, DeviceTypeDesktop:
+		return true
+	}
+	return false
+}
+
+func (e DeviceType) String() string {
+	return string(e)
+}
+
+func (e *DeviceType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DeviceType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DeviceType", str)
+	}
+	return nil
+}
+
+func (e DeviceType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DeviceType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DeviceType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 type Provider string
 
 const (
 	ProviderGoogle Provider = "GOOGLE"
 	ProviderApple  Provider = "APPLE"
-	ProviderYahoo  Provider = "YAHOO"
 )
 
 var AllProvider = []Provider{
 	ProviderGoogle,
 	ProviderApple,
-	ProviderYahoo,
 }
 
 func (e Provider) IsValid() bool {
 	switch e {
-	case ProviderGoogle, ProviderApple, ProviderYahoo:
+	case ProviderGoogle, ProviderApple:
 		return true
 	}
 	return false
