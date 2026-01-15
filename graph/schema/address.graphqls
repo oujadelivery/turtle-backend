@@ -1,0 +1,119 @@
+extend type Query {
+  # Get all addresses for current user
+  myAddresses: [Address!]!
+
+  # Get address by ID
+  address(id: Int!): Address
+
+  # Get default address
+  defaultAddress: Address
+
+  # Get suggested addresses (based on usage patterns)
+  suggestedAddresses(timeOfDay: TimeOfDay): [Address!]!
+}
+
+extend type Mutation {
+  # Create new address
+  createAddress(input: CreateAddressInput!): Address!
+
+  # Update existing address
+  updateAddress(id: Int!, input: UpdateAddressInput!): Address!
+
+  # Delete address
+  deleteAddress(id: Int!): SuccessResponse!
+
+  # Set default address
+  setDefaultAddress(id: Int!): Address!
+
+  # Verify address coordinates
+  verifyAddress(id: Int!): Address!
+}
+
+enum TimeOfDay {
+  MORNING
+  AFTERNOON
+  EVENING
+  NIGHT
+}
+
+enum AddressLabel {
+  HOME
+  WORK
+  OTHER
+}
+
+type Address {
+  id: Int!
+  userId: Int!
+
+  label: AddressLabel
+  addressLine1: String!
+  addressLine2: String
+  landmark: String
+  city: String!
+  state: String!
+  country: String!
+  postalCode: String!
+
+  latitude: Float!
+  longitude: Float!
+
+  contactName: String
+  contactPhone: String
+
+  isDefault: Boolean!
+  usageCount: Int!
+  lastUsedAt: Time
+
+  # Analytics
+  preferredTimeSlot: TimeOfDay
+  morningUsageCount: Int!
+  afternoonUsageCount: Int!
+  eveningUsageCount: Int!
+  nightUsageCount: Int!
+  weekdayUsageCount: Int!
+  weekendUsageCount: Int!
+
+  isActive: Boolean!
+  isVerified: Boolean!
+
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+input CreateAddressInput {
+  label: AddressLabel
+  addressLine1: String!
+  addressLine2: String
+  landmark: String
+  city: String!
+  state: String!
+  country: String = "India"
+  postalCode: String!
+
+  latitude: Float!
+  longitude: Float!
+
+  contactName: String
+  contactPhone: String
+
+  isDefault: Boolean = false
+}
+
+input UpdateAddressInput {
+  label: AddressLabel
+  addressLine1: String
+  addressLine2: String
+  landmark: String
+  city: String
+  state: String
+  postalCode: String
+
+  latitude: Float
+  longitude: Float
+
+  contactName: String
+  contactPhone: String
+
+  isActive: Boolean
+}

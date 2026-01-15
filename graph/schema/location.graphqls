@@ -1,0 +1,123 @@
+extend type Query {
+  # Get current location for user
+  myCurrentLocation: CurrentLocation
+
+  # Get location history for order
+  orderLocationHistory(orderId: Int!): [LocationTracking!]!
+
+  # Reverse geocode coordinates to address
+  reverseGeocode(latitude: Float!, longitude: Float!): GeocodedAddress!
+
+  # Calculate distance between two points
+  calculateDistance(
+    fromLat: Float!
+    fromLng: Float!
+    toLat: Float!
+    toLng: Float!
+  ): Distance!
+}
+
+extend type Mutation {
+  # Update current location
+  updateMyLocation(input: UpdateLocationInput!): CurrentLocation!
+
+  # Track location during order (captain only)
+  trackOrderLocation(
+    orderId: Int!
+    input: TrackLocationInput!
+  ): LocationTracking!
+
+  # Enable/disable live tracking
+  toggleLiveTracking(enabled: Boolean!): CurrentLocation!
+}
+
+extend type Subscription {
+  # Subscribe to location updates for order
+  trackOrder(orderId: Int!): LocationTracking!
+}
+
+type CurrentLocation {
+  id: Int!
+  userId: Int!
+
+  latitude: Float!
+  longitude: Float!
+  accuracy: Float
+
+  formattedAddress: String
+  city: String
+  state: String
+  country: String
+  postalCode: String
+
+  source: LocationSource!
+  isLiveTracking: Boolean!
+
+  updatedAt: Time!
+}
+
+type LocationTracking {
+  id: Int!
+  orderId: Int!
+  captainId: Int!
+
+  latitude: Float!
+  longitude: Float!
+  accuracy: Float
+  altitude: Float
+
+  speed: Float
+  bearing: Float
+
+  recordedAt: Time!
+
+  batteryLevel: Int
+  networkType: String
+  isGPSEnabled: Boolean!
+}
+
+type GeocodedAddress {
+  formattedAddress: String!
+  addressLine1: String
+  addressLine2: String
+  landmark: String
+  city: String
+  state: String
+  country: String
+  postalCode: String
+
+  latitude: Float!
+  longitude: Float!
+}
+
+type Distance {
+  distanceKm: Float!
+  distanceMeters: Float!
+  durationMinutes: Int!
+  durationSeconds: Int!
+}
+
+enum LocationSource {
+  GPS
+  MANUAL
+  ADDRESS
+  NETWORK
+}
+
+input UpdateLocationInput {
+  latitude: Float!
+  longitude: Float!
+  accuracy: Float
+  source: LocationSource = GPS
+}
+
+input TrackLocationInput {
+  latitude: Float!
+  longitude: Float!
+  accuracy: Float
+  altitude: Float
+  speed: Float
+  bearing: Float
+  batteryLevel: Int
+  networkType: String
+}

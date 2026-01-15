@@ -1,0 +1,166 @@
+extend type Query {
+  # Get current user profile
+  me: User!
+
+  # Get user by ID (admin only)
+  user(id: Int!): User
+
+  # Search users (admin only)
+  searchUsers(
+    query: String!
+    role: UserRole
+    pagination: PaginationInput
+  ): UserConnection!
+
+  # Get all captains (for admin)
+  getCaptains(
+    status: CaptainStatus
+    isAvailable: Boolean
+    pagination: PaginationInput
+  ): UserConnection!
+
+  # Get nearby captains (for order matching)
+  getNearbyCaptains(
+    latitude: Float!
+    longitude: Float!
+    radiusKm: Float!
+  ): [User!]!
+}
+
+extend type Mutation {
+  # Update user profile
+  updateProfile(input: UpdateProfileInput!): User!
+
+  # Update profile picture
+  updateProfilePicture(imageUrl: String!): User!
+
+  # Captain-specific mutations
+  updateCaptainProfile(input: UpdateCaptainProfileInput!): User!
+  toggleAvailability(isAvailable: Boolean!): User!
+  updateCurrentLocation(latitude: Float!, longitude: Float!): User!
+
+  # KYC and verification (captain)
+  submitKYCDocuments(input: KYCDocumentsInput!): User!
+
+  # Admin actions
+  updateUserStatus(userId: Int!, status: UserStatus!): User!
+  approveKYC(userId: Int!, approved: Boolean!, reason: String): User!
+  blockUser(userId: Int!, reason: String!): User!
+  unblockUser(userId: Int!): User!
+}
+
+enum UserRole {
+  CUSTOMER
+  CAPTAIN
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  PENDING_KYC
+  SUSPENDED
+}
+
+enum CaptainStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum VehicleType {
+  BIKE
+  CAR
+  VAN
+  TRUCK
+}
+
+type User {
+  id: Int!
+  firstName: String
+  lastName: String
+  fullName: String
+  profilePic: String
+
+  email: String
+  emailVerified: Boolean!
+  phone: String
+  phoneVerified: Boolean!
+
+  role: UserRole!
+  status: UserStatus!
+
+  # Captain specific
+  vehicleType: VehicleType
+  vehicleNumber: String
+  vehicleModel: String
+  licenseNumber: String
+  licenseExpiry: Time
+  isAvailable: Boolean
+  currentLocation: Location
+
+  # Stats
+  rating: Float
+  totalRatings: Int!
+  totalDeliveries: Int!
+  totalOrders: Int!
+  completionRate: Float
+  cancellationRate: Float
+
+  # KYC
+  kycStatus: CaptainStatus
+  kycDocuments: [String!]
+  backgroundCheckStatus: String
+  onboardingCompletedAt: Time
+
+  # Financial
+  walletBalance: Float!
+  currency: String!
+
+  # Metadata
+  lastActiveAt: Time
+  referralCode: String
+
+  createdAt: Time!
+  updatedAt: Time!
+
+  # Relationships
+  addresses: [Address!]
+}
+
+type UserConnection {
+  edges: [User!]!
+  pageInfo: PaginationInfo!
+}
+
+type Location {
+  latitude: Float!
+  longitude: Float!
+  address: String
+  city: String
+  updatedAt: Time
+}
+
+input UpdateProfileInput {
+  firstName: String
+  lastName: String
+  email: String
+  phone: String
+}
+
+input UpdateCaptainProfileInput {
+  vehicleType: VehicleType
+  vehicleNumber: String
+  vehicleModel: String
+  licenseNumber: String
+  licenseExpiry: Time
+}
+
+input KYCDocumentsInput {
+  licensePhotoUrl: String!
+  vehicleRCUrl: String!
+  insuranceUrl: String!
+  profilePhotoUrl: String!
+  aadhaarUrl: String
+  panUrl: String
+}

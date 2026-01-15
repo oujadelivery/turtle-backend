@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"turtle/infra"
@@ -174,5 +175,22 @@ func ResetFailedAttempts(target string) error {
 		return fmt.Errorf("failed to reset attempts: %w", err)
 	}
 
+	return nil
+}
+
+func Generate() string {
+	rand.Seed(time.Now().UnixNano())
+	return fmt.Sprintf("%06d", rand.Intn(1000000))
+}
+
+func SendEmail(email, code string) error {
+	// TODO: Implement with SendGrid / AWS SES
+	fmt.Printf("📧 Sending OTP %s to email: %s\n", code, email)
+	return nil
+}
+
+func SendSMS(phone, code string) error {
+	// TODO: Implement with Twilio / Msg91
+	fmt.Printf("📱 Sending OTP %s to phone: %s\n", code, phone)
 	return nil
 }

@@ -1,6 +1,7 @@
 schema {
   query: Query
   mutation: Mutation
+  subscription: Subscription
 }
 
 type Query {
@@ -9,4 +10,44 @@ type Query {
 
 type Mutation {
   _empty: String
+}
+
+type Subscription {
+  _empty: String
+}
+
+# Common scalars
+scalar Time
+scalar JSON
+
+# Common types
+type PaginationInfo {
+  total: Int!
+  page: Int!
+  pageSize: Int!
+  totalPages: Int!
+  hasNext: Boolean!
+  hasPrev: Boolean!
+}
+
+input PaginationInput {
+  page: Int = 1
+  pageSize: Int = 20
+}
+
+# Common response
+interface Response {
+  success: Boolean!
+  message: String
+}
+
+type SuccessResponse implements Response {
+  success: Boolean!
+  message: String
+}
+
+type ErrorResponse implements Response {
+  success: Boolean!
+  message: String
+  code: String
 }

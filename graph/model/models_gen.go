@@ -7,7 +7,15 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"time"
+	"turtle/models"
 )
+
+type Response interface {
+	IsResponse()
+	GetSuccess() bool
+	GetMessage() *string
+}
 
 type AuthPayload struct {
 	AccessToken  string `json:"accessToken"`
@@ -16,10 +24,588 @@ type AuthPayload struct {
 	Role         string `json:"role"`
 }
 
+type ChatMessageConnection struct {
+	Edges    []*models.ChatMessage `json:"edges"`
+	PageInfo *PaginationInfo       `json:"pageInfo"`
+}
+
+type CouponValidation struct {
+	IsValid        bool     `json:"isValid"`
+	Message        *string  `json:"message,omitempty"`
+	DiscountAmount *float64 `json:"discountAmount,omitempty"`
+	FinalAmount    *float64 `json:"finalAmount,omitempty"`
+}
+
+type CreateAddressInput struct {
+	Label        *AddressLabel `json:"label,omitempty"`
+	AddressLine1 string        `json:"addressLine1"`
+	AddressLine2 *string       `json:"addressLine2,omitempty"`
+	Landmark     *string       `json:"landmark,omitempty"`
+	City         string        `json:"city"`
+	State        string        `json:"state"`
+	Country      *string       `json:"country,omitempty"`
+	PostalCode   string        `json:"postalCode"`
+	Latitude     float64       `json:"latitude"`
+	Longitude    float64       `json:"longitude"`
+	ContactName  *string       `json:"contactName,omitempty"`
+	ContactPhone *string       `json:"contactPhone,omitempty"`
+	IsDefault    *bool         `json:"isDefault,omitempty"`
+}
+
+type CreateCouponInput struct {
+	Code             string     `json:"code"`
+	Description      *string    `json:"description,omitempty"`
+	Type             CouponType `json:"type"`
+	Value            float64    `json:"value"`
+	MinOrderValue    *float64   `json:"minOrderValue,omitempty"`
+	MaxDiscountValue *float64   `json:"maxDiscountValue,omitempty"`
+	UsageLimit       *int       `json:"usageLimit,omitempty"`
+	PerUserLimit     *int       `json:"perUserLimit,omitempty"`
+	ValidFrom        time.Time  `json:"validFrom"`
+	ValidUntil       time.Time  `json:"validUntil"`
+	IsPublic         *bool      `json:"isPublic,omitempty"`
+	FirstOrderOnly   *bool      `json:"firstOrderOnly,omitempty"`
+}
+
+type CreateOrderInput struct {
+	PickupAddressID      int           `json:"pickupAddressId"`
+	PickupName           string        `json:"pickupName"`
+	PickupPhone          string        `json:"pickupPhone"`
+	PickupInstructions   *string       `json:"pickupInstructions,omitempty"`
+	DeliveryAddressID    int           `json:"deliveryAddressId"`
+	DeliveryName         string        `json:"deliveryName"`
+	DeliveryPhone        string        `json:"deliveryPhone"`
+	DeliveryInstructions *string       `json:"deliveryInstructions,omitempty"`
+	ParcelType           ParcelType    `json:"parcelType"`
+	ParcelWeight         *float64      `json:"parcelWeight,omitempty"`
+	ParcelDescription    *string       `json:"parcelDescription,omitempty"`
+	ParcelValue          *float64      `json:"parcelValue,omitempty"`
+	ParcelImages         []string      `json:"parcelImages,omitempty"`
+	PaymentMethod        PaymentMethod `json:"paymentMethod"`
+	CouponCode           *string       `json:"couponCode,omitempty"`
+	IsPriority           *bool         `json:"isPriority,omitempty"`
+	IsInsured            *bool         `json:"isInsured,omitempty"`
+}
+
+type CreateTicketInput struct {
+	OrderID     *int           `json:"orderId,omitempty"`
+	Subject     string         `json:"subject"`
+	Description string         `json:"description"`
+	Priority    *string        `json:"priority,omitempty"`
+	Category    TicketCategory `json:"category"`
+	Attachments []string       `json:"attachments,omitempty"`
+}
+
+type Distance struct {
+	DistanceKm      float64 `json:"distanceKm"`
+	DistanceMeters  float64 `json:"distanceMeters"`
+	DurationMinutes int     `json:"durationMinutes"`
+	DurationSeconds int     `json:"durationSeconds"`
+}
+
+type EarningsSummary struct {
+	TotalEarnings   float64                   `json:"totalEarnings"`
+	PlatformFee     float64                   `json:"platformFee"`
+	NetEarnings     float64                   `json:"netEarnings"`
+	TipsReceived    float64                   `json:"tipsReceived"`
+	BonusEarnings   float64                   `json:"bonusEarnings"`
+	TotalOrders     int                       `json:"totalOrders"`
+	CompletedOrders int                       `json:"completedOrders"`
+	CancelledOrders int                       `json:"cancelledOrders"`
+	TotalDistance   float64                   `json:"totalDistance"`
+	OnlineHours     float64                   `json:"onlineHours"`
+	AverageRating   float64                   `json:"averageRating"`
+	DailyBreakdown  []*models.CaptainEarnings `json:"dailyBreakdown"`
+}
+
+type ErrorResponse struct {
+	Success bool    `json:"success"`
+	Message *string `json:"message,omitempty"`
+	Code    *string `json:"code,omitempty"`
+}
+
+func (ErrorResponse) IsResponse()              {}
+func (this ErrorResponse) GetSuccess() bool    { return this.Success }
+func (this ErrorResponse) GetMessage() *string { return this.Message }
+
+type EstimatePriceInput struct {
+	PickupLat    float64    `json:"pickupLat"`
+	PickupLng    float64    `json:"pickupLng"`
+	DeliveryLat  float64    `json:"deliveryLat"`
+	DeliveryLng  float64    `json:"deliveryLng"`
+	ParcelType   ParcelType `json:"parcelType"`
+	ParcelWeight *float64   `json:"parcelWeight,omitempty"`
+	IsPriority   *bool      `json:"isPriority,omitempty"`
+	CouponCode   *string    `json:"couponCode,omitempty"`
+}
+
+type GeocodedAddress struct {
+	FormattedAddress string  `json:"formattedAddress"`
+	AddressLine1     *string `json:"addressLine1,omitempty"`
+	AddressLine2     *string `json:"addressLine2,omitempty"`
+	Landmark         *string `json:"landmark,omitempty"`
+	City             *string `json:"city,omitempty"`
+	State            *string `json:"state,omitempty"`
+	Country          *string `json:"country,omitempty"`
+	PostalCode       *string `json:"postalCode,omitempty"`
+	Latitude         float64 `json:"latitude"`
+	Longitude        float64 `json:"longitude"`
+}
+
+type KYCDocumentsInput struct {
+	LicensePhotoURL string  `json:"licensePhotoUrl"`
+	VehicleRCUrl    string  `json:"vehicleRCUrl"`
+	InsuranceURL    string  `json:"insuranceUrl"`
+	ProfilePhotoURL string  `json:"profilePhotoUrl"`
+	AadhaarURL      *string `json:"aadhaarUrl,omitempty"`
+	PanURL          *string `json:"panUrl,omitempty"`
+}
+
+type Location struct {
+	Latitude  float64    `json:"latitude"`
+	Longitude float64    `json:"longitude"`
+	Address   *string    `json:"address,omitempty"`
+	City      *string    `json:"city,omitempty"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+}
+
+type LocationUpdate struct {
+	OrderID   int       `json:"orderId"`
+	CaptainID int       `json:"captainId"`
+	Latitude  float64   `json:"latitude"`
+	Longitude float64   `json:"longitude"`
+	Speed     *float64  `json:"speed,omitempty"`
+	Bearing   *float64  `json:"bearing,omitempty"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
 type Mutation struct {
 }
 
+type NotificationConnection struct {
+	Edges    []*models.Notification `json:"edges"`
+	PageInfo *PaginationInfo        `json:"pageInfo"`
+}
+
+type OrderConnection struct {
+	Edges    []*models.Order `json:"edges"`
+	PageInfo *PaginationInfo `json:"pageInfo"`
+}
+
+type PaginationInfo struct {
+	Total      int  `json:"total"`
+	Page       int  `json:"page"`
+	PageSize   int  `json:"pageSize"`
+	TotalPages int  `json:"totalPages"`
+	HasNext    bool `json:"hasNext"`
+	HasPrev    bool `json:"hasPrev"`
+}
+
+type PaginationInput struct {
+	Page     *int `json:"page,omitempty"`
+	PageSize *int `json:"pageSize,omitempty"`
+}
+
+type PriceEstimate struct {
+	BasePrice         float64 `json:"basePrice"`
+	DistancePrice     float64 `json:"distancePrice"`
+	SurgeMultiplier   float64 `json:"surgeMultiplier"`
+	SurgePrice        float64 `json:"surgePrice"`
+	DiscountAmount    float64 `json:"discountAmount"`
+	TaxAmount         float64 `json:"taxAmount"`
+	EstimatedTotal    float64 `json:"estimatedTotal"`
+	EstimatedDistance float64 `json:"estimatedDistance"`
+	EstimatedDuration int     `json:"estimatedDuration"`
+	Currency          string  `json:"currency"`
+}
+
 type Query struct {
+}
+
+type RateUserInput struct {
+	OrderID               int      `json:"orderId"`
+	RatedUserID           int      `json:"ratedUserId"`
+	Rating                float64  `json:"rating"`
+	BehaviorRating        *float64 `json:"behaviorRating,omitempty"`
+	TimelinessRating      *float64 `json:"timelinessRating,omitempty"`
+	CommunicationRating   *float64 `json:"communicationRating,omitempty"`
+	ParcelConditionRating *float64 `json:"parcelConditionRating,omitempty"`
+	Comment               *string  `json:"comment,omitempty"`
+	Tags                  []string `json:"tags,omitempty"`
+}
+
+type RatingConnection struct {
+	Edges    []*models.Rating `json:"edges"`
+	PageInfo *PaginationInfo  `json:"pageInfo"`
+}
+
+type ScheduleOrderInput struct {
+	OrderInput        *CreateOrderInput `json:"orderInput"`
+	ScheduledPickupAt time.Time         `json:"scheduledPickupAt"`
+}
+
+type SendMessageInput struct {
+	RoomID      int          `json:"roomId"`
+	ReceiverID  int          `json:"receiverId"`
+	Message     string       `json:"message"`
+	MessageType *MessageType `json:"messageType,omitempty"`
+	MediaURL    *string      `json:"mediaURL,omitempty"`
+	Latitude    *float64     `json:"latitude,omitempty"`
+	Longitude   *float64     `json:"longitude,omitempty"`
+}
+
+type StatusHistoryItem struct {
+	Status    OrderStatus `json:"status"`
+	Timestamp time.Time   `json:"timestamp"`
+	Note      *string     `json:"note,omitempty"`
+}
+
+type Subscription struct {
+}
+
+type SuccessResponse struct {
+	Success bool    `json:"success"`
+	Message *string `json:"message,omitempty"`
+}
+
+func (SuccessResponse) IsResponse()              {}
+func (this SuccessResponse) GetSuccess() bool    { return this.Success }
+func (this SuccessResponse) GetMessage() *string { return this.Message }
+
+type TicketConnection struct {
+	Edges    []*models.SupportTicket `json:"edges"`
+	PageInfo *PaginationInfo         `json:"pageInfo"`
+}
+
+type TicketMessage struct {
+	ID           int          `json:"id"`
+	TicketID     int          `json:"ticketId"`
+	UserID       int          `json:"userId"`
+	Message      string       `json:"message"`
+	Attachments  []string     `json:"attachments,omitempty"`
+	IsStaffReply bool         `json:"isStaffReply"`
+	User         *models.User `json:"user"`
+	CreatedAt    time.Time    `json:"createdAt"`
+}
+
+type TrackLocationInput struct {
+	Latitude     float64  `json:"latitude"`
+	Longitude    float64  `json:"longitude"`
+	Accuracy     *float64 `json:"accuracy,omitempty"`
+	Altitude     *float64 `json:"altitude,omitempty"`
+	Speed        *float64 `json:"speed,omitempty"`
+	Bearing      *float64 `json:"bearing,omitempty"`
+	BatteryLevel *int     `json:"batteryLevel,omitempty"`
+	NetworkType  *string  `json:"networkType,omitempty"`
+}
+
+type TransactionConnection struct {
+	Edges    []*models.Transaction `json:"edges"`
+	PageInfo *PaginationInfo       `json:"pageInfo"`
+}
+
+type TypingIndicator struct {
+	RoomID   int  `json:"roomId"`
+	UserID   int  `json:"userId"`
+	IsTyping bool `json:"isTyping"`
+}
+
+type UpdateAddressInput struct {
+	Label        *AddressLabel `json:"label,omitempty"`
+	AddressLine1 *string       `json:"addressLine1,omitempty"`
+	AddressLine2 *string       `json:"addressLine2,omitempty"`
+	Landmark     *string       `json:"landmark,omitempty"`
+	City         *string       `json:"city,omitempty"`
+	State        *string       `json:"state,omitempty"`
+	PostalCode   *string       `json:"postalCode,omitempty"`
+	Latitude     *float64      `json:"latitude,omitempty"`
+	Longitude    *float64      `json:"longitude,omitempty"`
+	ContactName  *string       `json:"contactName,omitempty"`
+	ContactPhone *string       `json:"contactPhone,omitempty"`
+	IsActive     *bool         `json:"isActive,omitempty"`
+}
+
+type UpdateCaptainProfileInput struct {
+	VehicleType   *VehicleType `json:"vehicleType,omitempty"`
+	VehicleNumber *string      `json:"vehicleNumber,omitempty"`
+	VehicleModel  *string      `json:"vehicleModel,omitempty"`
+	LicenseNumber *string      `json:"licenseNumber,omitempty"`
+	LicenseExpiry *time.Time   `json:"licenseExpiry,omitempty"`
+}
+
+type UpdateCouponInput struct {
+	Description      *string    `json:"description,omitempty"`
+	Value            *float64   `json:"value,omitempty"`
+	MinOrderValue    *float64   `json:"minOrderValue,omitempty"`
+	MaxDiscountValue *float64   `json:"maxDiscountValue,omitempty"`
+	UsageLimit       *int       `json:"usageLimit,omitempty"`
+	ValidFrom        *time.Time `json:"validFrom,omitempty"`
+	ValidUntil       *time.Time `json:"validUntil,omitempty"`
+	IsActive         *bool      `json:"isActive,omitempty"`
+}
+
+type UpdateLocationInput struct {
+	Latitude  float64         `json:"latitude"`
+	Longitude float64         `json:"longitude"`
+	Accuracy  *float64        `json:"accuracy,omitempty"`
+	Source    *LocationSource `json:"source,omitempty"`
+}
+
+type UpdateProfileInput struct {
+	FirstName *string `json:"firstName,omitempty"`
+	LastName  *string `json:"lastName,omitempty"`
+	Email     *string `json:"email,omitempty"`
+	Phone     *string `json:"phone,omitempty"`
+}
+
+type UpdateRatingInput struct {
+	Rating                *float64 `json:"rating,omitempty"`
+	BehaviorRating        *float64 `json:"behaviorRating,omitempty"`
+	TimelinessRating      *float64 `json:"timelinessRating,omitempty"`
+	CommunicationRating   *float64 `json:"communicationRating,omitempty"`
+	ParcelConditionRating *float64 `json:"parcelConditionRating,omitempty"`
+	Comment               *string  `json:"comment,omitempty"`
+	Tags                  []string `json:"tags,omitempty"`
+}
+
+type UserConnection struct {
+	Edges    []*models.User  `json:"edges"`
+	PageInfo *PaginationInfo `json:"pageInfo"`
+}
+
+type Wallet struct {
+	Balance       float64   `json:"balance"`
+	Currency      string    `json:"currency"`
+	LastUpdated   time.Time `json:"lastUpdated"`
+	PendingAmount float64   `json:"pendingAmount"`
+}
+
+type AddressLabel string
+
+const (
+	AddressLabelHome  AddressLabel = "HOME"
+	AddressLabelWork  AddressLabel = "WORK"
+	AddressLabelOther AddressLabel = "OTHER"
+)
+
+var AllAddressLabel = []AddressLabel{
+	AddressLabelHome,
+	AddressLabelWork,
+	AddressLabelOther,
+}
+
+func (e AddressLabel) IsValid() bool {
+	switch e {
+	case AddressLabelHome, AddressLabelWork, AddressLabelOther:
+		return true
+	}
+	return false
+}
+
+func (e AddressLabel) String() string {
+	return string(e)
+}
+
+func (e *AddressLabel) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = AddressLabel(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid AddressLabel", str)
+	}
+	return nil
+}
+
+func (e AddressLabel) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *AddressLabel) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e AddressLabel) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type CaptainStatus string
+
+const (
+	CaptainStatusPending  CaptainStatus = "PENDING"
+	CaptainStatusVerified CaptainStatus = "VERIFIED"
+	CaptainStatusRejected CaptainStatus = "REJECTED"
+)
+
+var AllCaptainStatus = []CaptainStatus{
+	CaptainStatusPending,
+	CaptainStatusVerified,
+	CaptainStatusRejected,
+}
+
+func (e CaptainStatus) IsValid() bool {
+	switch e {
+	case CaptainStatusPending, CaptainStatusVerified, CaptainStatusRejected:
+		return true
+	}
+	return false
+}
+
+func (e CaptainStatus) String() string {
+	return string(e)
+}
+
+func (e *CaptainStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = CaptainStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid CaptainStatus", str)
+	}
+	return nil
+}
+
+func (e CaptainStatus) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *CaptainStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e CaptainStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type CouponType string
+
+const (
+	CouponTypePercentage   CouponType = "PERCENTAGE"
+	CouponTypeFixedAmount  CouponType = "FIXED_AMOUNT"
+	CouponTypeFreeDelivery CouponType = "FREE_DELIVERY"
+)
+
+var AllCouponType = []CouponType{
+	CouponTypePercentage,
+	CouponTypeFixedAmount,
+	CouponTypeFreeDelivery,
+}
+
+func (e CouponType) IsValid() bool {
+	switch e {
+	case CouponTypePercentage, CouponTypeFixedAmount, CouponTypeFreeDelivery:
+		return true
+	}
+	return false
+}
+
+func (e CouponType) String() string {
+	return string(e)
+}
+
+func (e *CouponType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = CouponType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid CouponType", str)
+	}
+	return nil
+}
+
+func (e CouponType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *CouponType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e CouponType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type DevicePlatform string
+
+const (
+	DevicePlatformIos     DevicePlatform = "IOS"
+	DevicePlatformAndroid DevicePlatform = "ANDROID"
+	DevicePlatformWeb     DevicePlatform = "WEB"
+)
+
+var AllDevicePlatform = []DevicePlatform{
+	DevicePlatformIos,
+	DevicePlatformAndroid,
+	DevicePlatformWeb,
+}
+
+func (e DevicePlatform) IsValid() bool {
+	switch e {
+	case DevicePlatformIos, DevicePlatformAndroid, DevicePlatformWeb:
+		return true
+	}
+	return false
+}
+
+func (e DevicePlatform) String() string {
+	return string(e)
+}
+
+func (e *DevicePlatform) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DevicePlatform(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DevicePlatform", str)
+	}
+	return nil
+}
+
+func (e DevicePlatform) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DevicePlatform) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DevicePlatform) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }
 
 type DeviceType string
@@ -79,6 +665,441 @@ func (e DeviceType) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+type LocationSource string
+
+const (
+	LocationSourceGps     LocationSource = "GPS"
+	LocationSourceManual  LocationSource = "MANUAL"
+	LocationSourceAddress LocationSource = "ADDRESS"
+	LocationSourceNetwork LocationSource = "NETWORK"
+)
+
+var AllLocationSource = []LocationSource{
+	LocationSourceGps,
+	LocationSourceManual,
+	LocationSourceAddress,
+	LocationSourceNetwork,
+}
+
+func (e LocationSource) IsValid() bool {
+	switch e {
+	case LocationSourceGps, LocationSourceManual, LocationSourceAddress, LocationSourceNetwork:
+		return true
+	}
+	return false
+}
+
+func (e LocationSource) String() string {
+	return string(e)
+}
+
+func (e *LocationSource) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = LocationSource(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid LocationSource", str)
+	}
+	return nil
+}
+
+func (e LocationSource) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *LocationSource) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e LocationSource) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type MessageType string
+
+const (
+	MessageTypeText     MessageType = "TEXT"
+	MessageTypeImage    MessageType = "IMAGE"
+	MessageTypeLocation MessageType = "LOCATION"
+	MessageTypeAudio    MessageType = "AUDIO"
+)
+
+var AllMessageType = []MessageType{
+	MessageTypeText,
+	MessageTypeImage,
+	MessageTypeLocation,
+	MessageTypeAudio,
+}
+
+func (e MessageType) IsValid() bool {
+	switch e {
+	case MessageTypeText, MessageTypeImage, MessageTypeLocation, MessageTypeAudio:
+		return true
+	}
+	return false
+}
+
+func (e MessageType) String() string {
+	return string(e)
+}
+
+func (e *MessageType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = MessageType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid MessageType", str)
+	}
+	return nil
+}
+
+func (e MessageType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *MessageType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e MessageType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type NotificationType string
+
+const (
+	NotificationTypeOrderUpdate NotificationType = "ORDER_UPDATE"
+	NotificationTypePromotion   NotificationType = "PROMOTION"
+	NotificationTypePayment     NotificationType = "PAYMENT"
+	NotificationTypeSystem      NotificationType = "SYSTEM"
+	NotificationTypeRating      NotificationType = "RATING"
+	NotificationTypeSupport     NotificationType = "SUPPORT"
+)
+
+var AllNotificationType = []NotificationType{
+	NotificationTypeOrderUpdate,
+	NotificationTypePromotion,
+	NotificationTypePayment,
+	NotificationTypeSystem,
+	NotificationTypeRating,
+	NotificationTypeSupport,
+}
+
+func (e NotificationType) IsValid() bool {
+	switch e {
+	case NotificationTypeOrderUpdate, NotificationTypePromotion, NotificationTypePayment, NotificationTypeSystem, NotificationTypeRating, NotificationTypeSupport:
+		return true
+	}
+	return false
+}
+
+func (e NotificationType) String() string {
+	return string(e)
+}
+
+func (e *NotificationType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = NotificationType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid NotificationType", str)
+	}
+	return nil
+}
+
+func (e NotificationType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *NotificationType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e NotificationType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type OrderStatus string
+
+const (
+	OrderStatusPending         OrderStatus = "PENDING"
+	OrderStatusAccepted        OrderStatus = "ACCEPTED"
+	OrderStatusCaptainArriving OrderStatus = "CAPTAIN_ARRIVING"
+	OrderStatusPickedUp        OrderStatus = "PICKED_UP"
+	OrderStatusInTransit       OrderStatus = "IN_TRANSIT"
+	OrderStatusDelivered       OrderStatus = "DELIVERED"
+	OrderStatusCancelled       OrderStatus = "CANCELLED"
+)
+
+var AllOrderStatus = []OrderStatus{
+	OrderStatusPending,
+	OrderStatusAccepted,
+	OrderStatusCaptainArriving,
+	OrderStatusPickedUp,
+	OrderStatusInTransit,
+	OrderStatusDelivered,
+	OrderStatusCancelled,
+}
+
+func (e OrderStatus) IsValid() bool {
+	switch e {
+	case OrderStatusPending, OrderStatusAccepted, OrderStatusCaptainArriving, OrderStatusPickedUp, OrderStatusInTransit, OrderStatusDelivered, OrderStatusCancelled:
+		return true
+	}
+	return false
+}
+
+func (e OrderStatus) String() string {
+	return string(e)
+}
+
+func (e *OrderStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = OrderStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid OrderStatus", str)
+	}
+	return nil
+}
+
+func (e OrderStatus) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *OrderStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e OrderStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type ParcelType string
+
+const (
+	ParcelTypeDocument    ParcelType = "DOCUMENT"
+	ParcelTypePackage     ParcelType = "PACKAGE"
+	ParcelTypeFood        ParcelType = "FOOD"
+	ParcelTypeFragile     ParcelType = "FRAGILE"
+	ParcelTypeElectronics ParcelType = "ELECTRONICS"
+	ParcelTypeClothing    ParcelType = "CLOTHING"
+	ParcelTypeGroceries   ParcelType = "GROCERIES"
+	ParcelTypeMedicines   ParcelType = "MEDICINES"
+	ParcelTypeOther       ParcelType = "OTHER"
+)
+
+var AllParcelType = []ParcelType{
+	ParcelTypeDocument,
+	ParcelTypePackage,
+	ParcelTypeFood,
+	ParcelTypeFragile,
+	ParcelTypeElectronics,
+	ParcelTypeClothing,
+	ParcelTypeGroceries,
+	ParcelTypeMedicines,
+	ParcelTypeOther,
+}
+
+func (e ParcelType) IsValid() bool {
+	switch e {
+	case ParcelTypeDocument, ParcelTypePackage, ParcelTypeFood, ParcelTypeFragile, ParcelTypeElectronics, ParcelTypeClothing, ParcelTypeGroceries, ParcelTypeMedicines, ParcelTypeOther:
+		return true
+	}
+	return false
+}
+
+func (e ParcelType) String() string {
+	return string(e)
+}
+
+func (e *ParcelType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ParcelType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ParcelType", str)
+	}
+	return nil
+}
+
+func (e ParcelType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ParcelType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ParcelType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type PaymentMethod string
+
+const (
+	PaymentMethodCash       PaymentMethod = "CASH"
+	PaymentMethodCard       PaymentMethod = "CARD"
+	PaymentMethodWallet     PaymentMethod = "WALLET"
+	PaymentMethodUpi        PaymentMethod = "UPI"
+	PaymentMethodNetBanking PaymentMethod = "NET_BANKING"
+)
+
+var AllPaymentMethod = []PaymentMethod{
+	PaymentMethodCash,
+	PaymentMethodCard,
+	PaymentMethodWallet,
+	PaymentMethodUpi,
+	PaymentMethodNetBanking,
+}
+
+func (e PaymentMethod) IsValid() bool {
+	switch e {
+	case PaymentMethodCash, PaymentMethodCard, PaymentMethodWallet, PaymentMethodUpi, PaymentMethodNetBanking:
+		return true
+	}
+	return false
+}
+
+func (e PaymentMethod) String() string {
+	return string(e)
+}
+
+func (e *PaymentMethod) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = PaymentMethod(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid PaymentMethod", str)
+	}
+	return nil
+}
+
+func (e PaymentMethod) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *PaymentMethod) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e PaymentMethod) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type PaymentStatus string
+
+const (
+	PaymentStatusPending  PaymentStatus = "PENDING"
+	PaymentStatusPaid     PaymentStatus = "PAID"
+	PaymentStatusRefunded PaymentStatus = "REFUNDED"
+	PaymentStatusFailed   PaymentStatus = "FAILED"
+)
+
+var AllPaymentStatus = []PaymentStatus{
+	PaymentStatusPending,
+	PaymentStatusPaid,
+	PaymentStatusRefunded,
+	PaymentStatusFailed,
+}
+
+func (e PaymentStatus) IsValid() bool {
+	switch e {
+	case PaymentStatusPending, PaymentStatusPaid, PaymentStatusRefunded, PaymentStatusFailed:
+		return true
+	}
+	return false
+}
+
+func (e PaymentStatus) String() string {
+	return string(e)
+}
+
+func (e *PaymentStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = PaymentStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid PaymentStatus", str)
+	}
+	return nil
+}
+
+func (e PaymentStatus) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *PaymentStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e PaymentStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 type Provider string
 
 const (
@@ -129,6 +1150,547 @@ func (e *Provider) UnmarshalJSON(b []byte) error {
 }
 
 func (e Provider) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type TicketCategory string
+
+const (
+	TicketCategoryOrderIssue      TicketCategory = "ORDER_ISSUE"
+	TicketCategoryPayment         TicketCategory = "PAYMENT"
+	TicketCategoryAccount         TicketCategory = "ACCOUNT"
+	TicketCategoryCaptainBehavior TicketCategory = "CAPTAIN_BEHAVIOR"
+	TicketCategoryAppBug          TicketCategory = "APP_BUG"
+	TicketCategoryFeatureRequest  TicketCategory = "FEATURE_REQUEST"
+	TicketCategoryOther           TicketCategory = "OTHER"
+)
+
+var AllTicketCategory = []TicketCategory{
+	TicketCategoryOrderIssue,
+	TicketCategoryPayment,
+	TicketCategoryAccount,
+	TicketCategoryCaptainBehavior,
+	TicketCategoryAppBug,
+	TicketCategoryFeatureRequest,
+	TicketCategoryOther,
+}
+
+func (e TicketCategory) IsValid() bool {
+	switch e {
+	case TicketCategoryOrderIssue, TicketCategoryPayment, TicketCategoryAccount, TicketCategoryCaptainBehavior, TicketCategoryAppBug, TicketCategoryFeatureRequest, TicketCategoryOther:
+		return true
+	}
+	return false
+}
+
+func (e TicketCategory) String() string {
+	return string(e)
+}
+
+func (e *TicketCategory) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = TicketCategory(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid TicketCategory", str)
+	}
+	return nil
+}
+
+func (e TicketCategory) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *TicketCategory) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e TicketCategory) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type TicketPriority string
+
+const (
+	TicketPriorityLow    TicketPriority = "LOW"
+	TicketPriorityMedium TicketPriority = "MEDIUM"
+	TicketPriorityHigh   TicketPriority = "HIGH"
+	TicketPriorityUrgent TicketPriority = "URGENT"
+)
+
+var AllTicketPriority = []TicketPriority{
+	TicketPriorityLow,
+	TicketPriorityMedium,
+	TicketPriorityHigh,
+	TicketPriorityUrgent,
+}
+
+func (e TicketPriority) IsValid() bool {
+	switch e {
+	case TicketPriorityLow, TicketPriorityMedium, TicketPriorityHigh, TicketPriorityUrgent:
+		return true
+	}
+	return false
+}
+
+func (e TicketPriority) String() string {
+	return string(e)
+}
+
+func (e *TicketPriority) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = TicketPriority(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid TicketPriority", str)
+	}
+	return nil
+}
+
+func (e TicketPriority) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *TicketPriority) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e TicketPriority) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type TicketStatus string
+
+const (
+	TicketStatusOpen       TicketStatus = "OPEN"
+	TicketStatusInProgress TicketStatus = "IN_PROGRESS"
+	TicketStatusResolved   TicketStatus = "RESOLVED"
+	TicketStatusClosed     TicketStatus = "CLOSED"
+)
+
+var AllTicketStatus = []TicketStatus{
+	TicketStatusOpen,
+	TicketStatusInProgress,
+	TicketStatusResolved,
+	TicketStatusClosed,
+}
+
+func (e TicketStatus) IsValid() bool {
+	switch e {
+	case TicketStatusOpen, TicketStatusInProgress, TicketStatusResolved, TicketStatusClosed:
+		return true
+	}
+	return false
+}
+
+func (e TicketStatus) String() string {
+	return string(e)
+}
+
+func (e *TicketStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = TicketStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid TicketStatus", str)
+	}
+	return nil
+}
+
+func (e TicketStatus) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *TicketStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e TicketStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type TimeOfDay string
+
+const (
+	TimeOfDayMorning   TimeOfDay = "MORNING"
+	TimeOfDayAfternoon TimeOfDay = "AFTERNOON"
+	TimeOfDayEvening   TimeOfDay = "EVENING"
+	TimeOfDayNight     TimeOfDay = "NIGHT"
+)
+
+var AllTimeOfDay = []TimeOfDay{
+	TimeOfDayMorning,
+	TimeOfDayAfternoon,
+	TimeOfDayEvening,
+	TimeOfDayNight,
+}
+
+func (e TimeOfDay) IsValid() bool {
+	switch e {
+	case TimeOfDayMorning, TimeOfDayAfternoon, TimeOfDayEvening, TimeOfDayNight:
+		return true
+	}
+	return false
+}
+
+func (e TimeOfDay) String() string {
+	return string(e)
+}
+
+func (e *TimeOfDay) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = TimeOfDay(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid TimeOfDay", str)
+	}
+	return nil
+}
+
+func (e TimeOfDay) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *TimeOfDay) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e TimeOfDay) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type TransactionStatus string
+
+const (
+	TransactionStatusPending  TransactionStatus = "PENDING"
+	TransactionStatusSuccess  TransactionStatus = "SUCCESS"
+	TransactionStatusFailed   TransactionStatus = "FAILED"
+	TransactionStatusRefunded TransactionStatus = "REFUNDED"
+)
+
+var AllTransactionStatus = []TransactionStatus{
+	TransactionStatusPending,
+	TransactionStatusSuccess,
+	TransactionStatusFailed,
+	TransactionStatusRefunded,
+}
+
+func (e TransactionStatus) IsValid() bool {
+	switch e {
+	case TransactionStatusPending, TransactionStatusSuccess, TransactionStatusFailed, TransactionStatusRefunded:
+		return true
+	}
+	return false
+}
+
+func (e TransactionStatus) String() string {
+	return string(e)
+}
+
+func (e *TransactionStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = TransactionStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid TransactionStatus", str)
+	}
+	return nil
+}
+
+func (e TransactionStatus) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *TransactionStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e TransactionStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type TransactionType string
+
+const (
+	TransactionTypeOrderPayment TransactionType = "ORDER_PAYMENT"
+	TransactionTypeRefund       TransactionType = "REFUND"
+	TransactionTypeWalletTopup  TransactionType = "WALLET_TOPUP"
+	TransactionTypeWithdrawal   TransactionType = "WITHDRAWAL"
+	TransactionTypeCommission   TransactionType = "COMMISSION"
+	TransactionTypeBonus        TransactionType = "BONUS"
+	TransactionTypeTip          TransactionType = "TIP"
+)
+
+var AllTransactionType = []TransactionType{
+	TransactionTypeOrderPayment,
+	TransactionTypeRefund,
+	TransactionTypeWalletTopup,
+	TransactionTypeWithdrawal,
+	TransactionTypeCommission,
+	TransactionTypeBonus,
+	TransactionTypeTip,
+}
+
+func (e TransactionType) IsValid() bool {
+	switch e {
+	case TransactionTypeOrderPayment, TransactionTypeRefund, TransactionTypeWalletTopup, TransactionTypeWithdrawal, TransactionTypeCommission, TransactionTypeBonus, TransactionTypeTip:
+		return true
+	}
+	return false
+}
+
+func (e TransactionType) String() string {
+	return string(e)
+}
+
+func (e *TransactionType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = TransactionType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid TransactionType", str)
+	}
+	return nil
+}
+
+func (e TransactionType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *TransactionType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e TransactionType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type UserRole string
+
+const (
+	UserRoleCustomer UserRole = "CUSTOMER"
+	UserRoleCaptain  UserRole = "CAPTAIN"
+	UserRoleAdmin    UserRole = "ADMIN"
+)
+
+var AllUserRole = []UserRole{
+	UserRoleCustomer,
+	UserRoleCaptain,
+	UserRoleAdmin,
+}
+
+func (e UserRole) IsValid() bool {
+	switch e {
+	case UserRoleCustomer, UserRoleCaptain, UserRoleAdmin:
+		return true
+	}
+	return false
+}
+
+func (e UserRole) String() string {
+	return string(e)
+}
+
+func (e *UserRole) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = UserRole(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid UserRole", str)
+	}
+	return nil
+}
+
+func (e UserRole) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *UserRole) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e UserRole) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type UserStatus string
+
+const (
+	UserStatusActive     UserStatus = "ACTIVE"
+	UserStatusBlocked    UserStatus = "BLOCKED"
+	UserStatusPendingKyc UserStatus = "PENDING_KYC"
+	UserStatusSuspended  UserStatus = "SUSPENDED"
+)
+
+var AllUserStatus = []UserStatus{
+	UserStatusActive,
+	UserStatusBlocked,
+	UserStatusPendingKyc,
+	UserStatusSuspended,
+}
+
+func (e UserStatus) IsValid() bool {
+	switch e {
+	case UserStatusActive, UserStatusBlocked, UserStatusPendingKyc, UserStatusSuspended:
+		return true
+	}
+	return false
+}
+
+func (e UserStatus) String() string {
+	return string(e)
+}
+
+func (e *UserStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = UserStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid UserStatus", str)
+	}
+	return nil
+}
+
+func (e UserStatus) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *UserStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e UserStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type VehicleType string
+
+const (
+	VehicleTypeBike  VehicleType = "BIKE"
+	VehicleTypeCar   VehicleType = "CAR"
+	VehicleTypeVan   VehicleType = "VAN"
+	VehicleTypeTruck VehicleType = "TRUCK"
+)
+
+var AllVehicleType = []VehicleType{
+	VehicleTypeBike,
+	VehicleTypeCar,
+	VehicleTypeVan,
+	VehicleTypeTruck,
+}
+
+func (e VehicleType) IsValid() bool {
+	switch e {
+	case VehicleTypeBike, VehicleTypeCar, VehicleTypeVan, VehicleTypeTruck:
+		return true
+	}
+	return false
+}
+
+func (e VehicleType) String() string {
+	return string(e)
+}
+
+func (e *VehicleType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = VehicleType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid VehicleType", str)
+	}
+	return nil
+}
+
+func (e VehicleType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *VehicleType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e VehicleType) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

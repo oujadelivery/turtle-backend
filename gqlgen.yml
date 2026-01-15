@@ -19,3 +19,15 @@ autobind:
   - "turtle/models"
 
 omit_slice_element_pointers: false
+
+# Map custom scalars
+models:
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.ID
+  Time:
+    model:
+      - github.com/99designs/gqlgen/graphql.Time
+  JSON:
+    model:
+      - github.com/99designs/gqlgen/graphql.Map
