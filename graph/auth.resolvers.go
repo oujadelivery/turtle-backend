@@ -116,7 +116,7 @@ func (r *mutationResolver) VerifyOtp(ctx context.Context, target string, code st
 	if purpose == PurposeCaptainLogin {
 		role = RoleCaptain
 		if err := db.DB.Where("phone = ?", target).FirstOrCreate(&user, models.User{
-			Phone:         target,
+			Phone:         stringPtr(target),
 			Role:          role,
 			PhoneVerified: true,
 			Status:        "ACTIVE",
@@ -125,7 +125,7 @@ func (r *mutationResolver) VerifyOtp(ctx context.Context, target string, code st
 		}
 	} else {
 		if err := db.DB.Where("email = ?", target).FirstOrCreate(&user, models.User{
-			Email:         target,
+			Email:         stringPtr(target),
 			Role:          role,
 			EmailVerified: true,
 			Status:        "ACTIVE",

@@ -26,12 +26,12 @@ func (j *JSONB) Scan(value interface{}) error {
 		*j = nil
 		return nil
 	}
-	
+
 	bytes, ok := value.([]byte)
 	if !ok {
 		return errors.New("failed to unmarshal JSONB value")
 	}
-	
+
 	return json.Unmarshal(bytes, j)
 }
 
@@ -45,30 +45,30 @@ type User struct {
 	ProfilePic string `gorm:"size:500"`
 
 	// Contact
-	Email         string `gorm:"uniqueIndex;size:255"`
-	EmailVerified bool   `gorm:"default:false;index"`
-	Phone         string `gorm:"uniqueIndex;size:20"`
-	PhoneVerified bool   `gorm:"default:false;index"`
+	Email         *string `gorm:"uniqueIndex;size:255"`
+	EmailVerified bool    `gorm:"default:false"`
+	Phone         *string `gorm:"uniqueIndex;size:20"`
+	PhoneVerified bool    `gorm:"default:false"`
 
 	// Role & Status
 	Role   string `gorm:"not null;default:'CUSTOMER';index:idx_role_status"`
 	Status string `gorm:"default:'ACTIVE';index:idx_role_status"`
 
 	// Social Login
-	Provider   string `gorm:"size:50;index"`
-	ProviderID string `gorm:"uniqueIndex;size:255"`
+	Provider   string  `gorm:"size:50;index"`
+	ProviderID *string `gorm:"uniqueIndex;size:255"` // Format: "GOOGLE:123456789"
 
 	// Captain Specific Fields
-	VehicleType   *string     `gorm:"size:50;index"`
-	VehicleNumber *string     `gorm:"size:50;uniqueIndex"`
-	VehicleModel  *string     `gorm:"size:100"`
-	LicenseNumber *string     `gorm:"size:100;uniqueIndex"`
+	VehicleType   *string    `gorm:"size:50;index"`
+	VehicleNumber *string    `gorm:"size:50;uniqueIndex"`
+	VehicleModel  *string    `gorm:"size:100"`
+	LicenseNumber *string    `gorm:"size:100;uniqueIndex"`
 	LicenseExpiry *time.Time `gorm:"index"`
 
-	IsAvailable                  bool       `gorm:"default:false;index:idx_available_captain"`
-	CurrentLat                   float64    `gorm:"type:decimal(10,8);index:idx_captain_location"`
-	CurrentLng                   float64    `gorm:"type:decimal(11,8);index:idx_captain_location"`
-	CurrentLocationUpdatedAt     *time.Time `gorm:"index"`
+	IsAvailable              bool       `gorm:"default:false;index:idx_available_captain"`
+	CurrentLat               float64    `gorm:"type:decimal(10,8);index:idx_captain_location"`
+	CurrentLng               float64    `gorm:"type:decimal(11,8);index:idx_captain_location"`
+	CurrentLocationUpdatedAt *time.Time `gorm:"index"`
 
 	// Ratings & Stats
 	Rating           float64 `gorm:"type:decimal(3,2);default:0;index"`
@@ -97,7 +97,7 @@ type User struct {
 	DeviceToken    string     `gorm:"size:500"`
 	DevicePlatform string     `gorm:"size:20"`
 	AppVersion     string     `gorm:"size:20"`
-	ReferralCode   *string     `gorm:"uniqueIndex;size:20"`
+	ReferralCode   *string    `gorm:"uniqueIndex;size:20"`
 	ReferredBy     *uint
 
 	// Security fields
