@@ -15,9 +15,9 @@ type User struct {
     ProfilePic string `gorm:"size:500"` // URL to profile image
 
     // Contact
-    Email         string `gorm:"uniqueIndex;size:255"`
+    Email         *string `gorm:"uniqueIndex;size:255"`
     EmailVerified bool   `gorm:"default:false"`
-    Phone         string `gorm:"uniqueIndex;size:20"`
+    Phone         *string `gorm:"uniqueIndex;size:20"`
     PhoneVerified bool   `gorm:"default:false"`
 
     // Role & Status
@@ -26,7 +26,7 @@ type User struct {
 
     // Social Login
     Provider   string `gorm:"size:50;index"`
-    ProviderID string `gorm:"uniqueIndex;size:255"` // Format: "GOOGLE:123456789"
+    ProviderID *string `gorm:"uniqueIndex;size:255"` // Format: "GOOGLE:123456789"
 
     // Captain Specific Fields
     VehicleType       string  `gorm:"size:50"` // BIKE / CAR / VAN / TRUCK
@@ -65,7 +65,7 @@ type User struct {
     DeviceToken     string `gorm:"size:500"` // For push notifications
     DevicePlatform  string `gorm:"size:20"`  // IOS / ANDROID / WEB
     AppVersion      string `gorm:"size:20"`
-    ReferralCode    string `gorm:"uniqueIndex;size:20"`
+    ReferralCode    *string `gorm:"uniqueIndex;size:20"`
     ReferredBy      *uint  // User ID who referred this user
 
     // Relationships

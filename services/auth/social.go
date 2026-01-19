@@ -36,8 +36,8 @@ func SocialLogin(provider, sub, email string) (*models.User, error) {
         if err != nil {
             // Create new user
             user = models.User{
-                Email:      email,
-                ProviderID: providerID,
+                Email:      stringPtr(email),
+                ProviderID: stringPtr(providerID),
                 Provider:   provider,
                 Role:       "CUSTOMER",
                 Status:     "ACTIVE",
@@ -52,8 +52,8 @@ func SocialLogin(provider, sub, email string) (*models.User, error) {
         }
         
         // User exists with email but different provider, link the account
-        if user.ProviderID == "" {
-            user.ProviderID = providerID
+        if ptrToString(user.ProviderID) == "" {
+            user.ProviderID = stringPtr(providerID)
             user.Provider = provider
             user.EmailVerified = true
             
@@ -97,4 +97,14 @@ func GetUserByPhone(phone string) (*models.User, error) {
     }
     
     return &user, nil
+}
+
+func stringPtr(s string) *string {
+	return &s
+}
+func ptrToString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
