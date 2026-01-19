@@ -7,8 +7,10 @@ package graph
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
+	"turtle/db"
 	"turtle/graph/generated"
 	"turtle/graph/model"
 	"turtle/middlewares"
@@ -80,17 +82,58 @@ func (r *mutationResolver) UpdateCaptainProfile(ctx context.Context, input model
 
 // ToggleAvailability is the resolver for the toggleAvailability field.
 func (r *mutationResolver) ToggleAvailability(ctx context.Context, isAvailable bool) (*models.User, error) {
-	panic(fmt.Errorf("not implemented: ToggleAvailability - toggleAvailability"))
+	authUser, err := middlewares.RequireRole(ctx, RoleCaptain)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := r.Resolver.UserService.ToggleAvailability(authUser.UserID, isAvailable)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
 }
 
 // UpdateCurrentLocation is the resolver for the updateCurrentLocation field.
 func (r *mutationResolver) UpdateCurrentLocation(ctx context.Context, latitude float64, longitude float64) (*models.User, error) {
-	panic(fmt.Errorf("not implemented: UpdateCurrentLocation - updateCurrentLocation"))
+	authUser, err := middlewares.RequireAuth(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := r.Resolver.UserService.UpdateCurrentLocation(authUser.UserID, latitude, longitude)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
 }
 
 // SubmitKYCDocuments is the resolver for the submitKYCDocuments field.
 func (r *mutationResolver) SubmitKYCDocuments(ctx context.Context, input model.KYCDocumentsInput) (*models.User, error) {
-	panic(fmt.Errorf("not implemented: SubmitKYCDocuments - submitKYCDocuments"))
+	authUser, err := middlewares.RequireRole(ctx, RoleCaptain)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert documents to JSON
+	documentsJSON, err := json.Marshal(input.AadhaarURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process documents: %w", err)
+	}
+
+	updates := map[string]interface{}{
+		"kyc_documents": string(documentsJSON),
+		"kyc_status":    "PENDING",
+	}
+
+	if err := db.DB.Model(&models.User{}).Where("id = ?", authUser.UserID).
+		Updates(updates).Error; err != nil {
+		return nil, err
+	}
+
+	return r.Resolver.UserService.GetUserByID(authUser.UserID)
 }
 
 // UpdateUserStatus is the resolver for the updateUserStatus field.
@@ -125,12 +168,35 @@ func (r *mutationResolver) ApproveKyc(ctx context.Context, userID int, approved 
 
 // BlockUser is the resolver for the blockUser field.
 func (r *mutationResolver) BlockUser(ctx context.Context, userID int, reason string) (*models.User, error) {
-	panic(fmt.Errorf("not implemented: BlockUser - blockUser"))
+	_, err := middlewares.RequireRole(ctx, RoleAdmin)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := r.Resolver.UserService.UpdateUserStatus(uint(userID), "BLOCKED")
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: Log the block reason
+	_ = reason
+
+	return user, nil
 }
 
 // UnblockUser is the resolver for the unblockUser field.
 func (r *mutationResolver) UnblockUser(ctx context.Context, userID int) (*models.User, error) {
-	panic(fmt.Errorf("not implemented: UnblockUser - unblockUser"))
+	_, err := middlewares.RequireRole(ctx, RoleAdmin)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := r.Resolver.UserService.UpdateUserStatus(uint(userID), "ACTIVE")
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
 }
 
 // Me is the resolver for the me field.
@@ -160,17 +226,94 @@ func (r *queryResolver) User(ctx context.Context, id int) (*models.User, error) 
 
 // SearchUsers is the resolver for the searchUsers field.
 func (r *queryResolver) SearchUsers(ctx context.Context, query string, role *model.UserRole, pagination *model.PaginationInput) (*model.UserConnection, error) {
-	panic(fmt.Errorf("not implemented: SearchUsers - searchUsers"))
+	_, err := middlewares.RequireRole(ctx, RoleAdmin)
+	if err != nil {
+		return nil, err
+	}
+
+	page, pageSize := getPaginationParams(pagination)
+
+	roleStr := ""
+	if role != nil {
+		roleStr = string(*role)
+	}
+
+	users, total, err := r.Resolver.UserService.SearchUsers(query, roleStr, page, pageSize)
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.UserConnection{
+		Edges: users,
+		PageInfo: &model.PaginationInfo{
+			Total:      int(total),
+			Page:       page,
+			PageSize:   pageSize,
+			TotalPages: (int(total) + pageSize - 1) / pageSize,
+			HasNext:    page*pageSize < int(total),
+			HasPrev:    page > 1,
+		},
+	}, nil
 }
 
 // GetCaptains is the resolver for the getCaptains field.
 func (r *queryResolver) GetCaptains(ctx context.Context, status *model.CaptainStatus, isAvailable *bool, pagination *model.PaginationInput) (*model.UserConnection, error) {
-	panic(fmt.Errorf("not implemented: GetCaptains - getCaptains"))
+	_, err := middlewares.RequireRole(ctx, RoleAdmin)
+	if err != nil {
+		return nil, err
+	}
+
+	page, pageSize := getPaginationParams(pagination)
+
+	var captains []*models.User
+	var total int64
+
+	query := db.DB.Model(&models.User{}).Where("role = ?", "CAPTAIN")
+
+	if status != nil {
+		query = query.Where("kyc_status = ?", string(*status))
+	}
+
+	if isAvailable != nil {
+		query = query.Where("is_available = ?", *isAvailable)
+	}
+
+	query.Count(&total)
+
+	offset := (page - 1) * pageSize
+	if err := query.Order("created_at DESC").
+		Offset(offset).Limit(pageSize).
+		Find(&captains).Error; err != nil {
+		return nil, err
+	}
+
+	return &model.UserConnection{
+		Edges: captains,
+		PageInfo: &model.PaginationInfo{
+			Total:      int(total),
+			Page:       page,
+			PageSize:   pageSize,
+			TotalPages: (int(total) + pageSize - 1) / pageSize,
+			HasNext:    page*pageSize < int(total),
+			HasPrev:    page > 1,
+		},
+	}, nil
 }
 
 // GetNearbyCaptains is the resolver for the getNearbyCaptains field.
 func (r *queryResolver) GetNearbyCaptains(ctx context.Context, latitude float64, longitude float64, radiusKm float64) ([]*models.User, error) {
-	panic(fmt.Errorf("not implemented: GetNearbyCaptains - getNearbyCaptains"))
+	authUser, err := middlewares.RequireAuth(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	captains, err := r.Resolver.UserService.GetNearbyCaptains(latitude, longitude, radiusKm)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = authUser
+	return captains, nil
 }
 
 // ID is the resolver for the id field.
@@ -195,16 +338,24 @@ func (r *userResolver) Status(ctx context.Context, obj *models.User) (model.User
 
 // VehicleType is the resolver for the vehicleType field.
 func (r *userResolver) VehicleType(ctx context.Context, obj *models.User) (*model.VehicleType, error) {
-	if !obj.IsCaptain() || obj.VehicleType == "" {
+	if !obj.IsCaptain() || ptrToString(obj.VehicleType) == "" {
 		return nil, nil
 	}
-	vType := model.VehicleType(obj.VehicleType)
+	// vType := model.VehicleType(obj.VehicleType)
+	vType := model.VehicleTypeBike
 	return &vType, nil
 }
 
 // CurrentLocation is the resolver for the currentLocation field.
 func (r *userResolver) CurrentLocation(ctx context.Context, obj *models.User) (*model.Location, error) {
-	panic(fmt.Errorf("not implemented: CurrentLocation - currentLocation"))
+	if obj.CurrentLat == 0 && obj.CurrentLng == 0 {
+		return nil, nil
+	}
+
+	return &model.Location{
+		Latitude:  obj.CurrentLat,
+		Longitude: obj.CurrentLng,
+	}, nil
 }
 
 // KycStatus is the resolver for the kycStatus field.
@@ -218,7 +369,17 @@ func (r *userResolver) KycStatus(ctx context.Context, obj *models.User) (*model.
 
 // KycDocuments is the resolver for the kycDocuments field.
 func (r *userResolver) KycDocuments(ctx context.Context, obj *models.User) ([]string, error) {
-	panic(fmt.Errorf("not implemented: KycDocuments - kycDocuments"))
+	return  nil, nil
+	// if !obj.IsCaptain() || obj.KycDocuments == "" {
+	// 	return []string{}, nil
+	// }
+
+	// var documents []string
+	// if err := json.Unmarshal([]byte(obj.KycDocuments), &documents); err != nil {
+	// 	return []string{}, nil
+	// }
+
+	// return documents, nil
 }
 
 // User returns generated.UserResolver implementation.
