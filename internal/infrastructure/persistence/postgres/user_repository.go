@@ -221,7 +221,7 @@ func (r *UserRepository) updateAdminProfile(ctx context.Context, profile *AdminP
 
 // UpdateWallet updates user wallet balance (with optimistic locking)
 // This is separated for better concurrency control on wallet operations
-func (r *UserRepository) UpdateWallet(ctx context.Context, userID string, expectedVersion int, newBalance int64) error {
+func (r *UserRepository) UpdateWallet(ctx context.Context, userID string, expectedVersion int64, newBalance int64) error {
 	result := r.db.WithContext(ctx).
 		Model(&UserModel{}).
 		Where("id = ? AND wallet_version = ?", userID, expectedVersion).

@@ -9,7 +9,7 @@ import (
 	"turtle/internal/domain"
 	"turtle/internal/domain/aggregates"
 	"turtle/internal/domain/valueobjects"
-	"turtle/internal/infrastructure/persistence/postgres"
+	infraPostgres "turtle/internal/infrastructure/persistence/postgres"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,12 +30,12 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 	// Auto-migrate tables
 	err = db.AutoMigrate(
-		&postgres.UserModel{},
-		&postgres.CaptainProfileModel{},
-		&postgres.AdminProfileModel{},
-		&postgres.AddressModel{},
-		&postgres.OTPSessionModel{},
-		&postgres.RefreshTokenModel{},
+		&infraPostgres.UserModel{},
+		&infraPostgres.CaptainProfileModel{},
+		&infraPostgres.AdminProfileModel{},
+		&infraPostgres.AddressModel{},
+		&infraPostgres.OTPSessionModel{},
+		&infraPostgres.RefreshTokenModel{},
 	)
 	require.NoError(t, err, "Failed to migrate test database")
 
@@ -62,7 +62,7 @@ func TestUserRepository_CreateAndFind(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	repo := postgres.NewUserRepository(db)
+	repo := infraPostgres.NewUserRepository(db)
 	ctx := context.Background()
 
 	// Create customer
@@ -100,7 +100,7 @@ func TestUserRepository_OptimisticLocking(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	repo := postgres.NewUserRepository(db)
+	repo := infraPostgres.NewUserRepository(db)
 	ctx := context.Background()
 
 	// Create user
@@ -127,7 +127,7 @@ func TestUserRepository_WalletOperations(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	repo := postgres.NewUserRepository(db)
+	repo := infraPostgres.NewUserRepository(db)
 	ctx := context.Background()
 
 	// Create user
@@ -153,7 +153,7 @@ func TestUserRepository_CaptainSearch(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	repo := postgres.NewUserRepository(db)
+	repo := infraPostgres.NewUserRepository(db)
 	ctx := context.Background()
 
 	// Create captains at different locations
@@ -192,8 +192,8 @@ func TestAddressRepository_CreateAndFind(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	addressRepo := postgres.NewAddressRepository(db)
-	userRepo := postgres.NewUserRepository(db)
+	addressRepo := infraPostgres.NewAddressRepository(db)
+	userRepo := infraPostgres.NewUserRepository(db)
 	ctx := context.Background()
 
 	// Create user first
@@ -235,8 +235,8 @@ func TestAddressRepository_SmartSuggestions(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	addressRepo := postgres.NewAddressRepository(db)
-	userRepo := postgres.NewUserRepository(db)
+	addressRepo := infraPostgres.NewAddressRepository(db)
+	userRepo := infraPostgres.NewUserRepository(db)
 	ctx := context.Background()
 
 	// Create user
@@ -282,8 +282,8 @@ func TestAddressRepository_UsageAnalytics(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	addressRepo := postgres.NewAddressRepository(db)
-	userRepo := postgres.NewUserRepository(db)
+	addressRepo := infraPostgres.NewAddressRepository(db)
+	userRepo := infraPostgres.NewUserRepository(db)
 	ctx := context.Background()
 
 	// Create user and address
@@ -338,7 +338,7 @@ func TestOTPRepository_CreateAndVerify(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	repo := postgres.NewOTPRepository(db)
+	repo := infraPostgres.NewOTPRepository(db)
 	ctx := context.Background()
 
 	// Create OTP
@@ -374,7 +374,7 @@ func TestOTPRepository_RateLimiting(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	repo := postgres.NewOTPRepository(db)
+	repo := infraPostgres.NewOTPRepository(db)
 	ctx := context.Background()
 
 	phone := "+919876543210"
@@ -400,8 +400,8 @@ func TestRefreshTokenRepository_CreateAndFind(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	tokenRepo := postgres.NewRefreshTokenRepository(db)
-	userRepo := postgres.NewUserRepository(db)
+	tokenRepo := infraPostgres.NewRefreshTokenRepository(db)
+	userRepo := infraPostgres.NewUserRepository(db)
 	ctx := context.Background()
 
 	// Create user
@@ -435,8 +435,8 @@ func TestRefreshTokenRepository_SessionManagement(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	tokenRepo := postgres.NewRefreshTokenRepository(db)
-	userRepo := postgres.NewUserRepository(db)
+	tokenRepo := infraPostgres.NewRefreshTokenRepository(db)
+	userRepo := infraPostgres.NewUserRepository(db)
 	ctx := context.Background()
 
 	// Create user
@@ -478,8 +478,8 @@ func TestCleanupOperations(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestDB(t, db)
 
-	otpRepo := postgres.NewOTPRepository(db)
-	tokenRepo := postgres.NewRefreshTokenRepository(db)
+	otpRepo := infraPostgres.NewOTPRepository(db)
+	tokenRepo := infraPostgres.NewRefreshTokenRepository(db)
 	ctx := context.Background()
 
 	// Create expired OTP
@@ -497,7 +497,7 @@ func TestCleanupOperations(t *testing.T) {
 
 	// Create expired token
 	email := "cleanup@example.com"
-	user, _ := aggregates.NewUser("", "Test", "User", &email, nil, aggregates.RoleCustomer, "GOOGLE")
+	aggregates.NewUser("", "Test", "User", &email, nil, aggregates.RoleCustomer, "GOOGLE")
 	// (Assuming user repo is available)
 
 	expiredToken := "expired_token"
@@ -517,7 +517,7 @@ func TestCleanupOperations(t *testing.T) {
 
 func BenchmarkUserRepository_FindByID(b *testing.B) {
 	db := setupTestDB(&testing.T{})
-	repo := postgres.NewUserRepository(db)
+	repo := infraPostgres.NewUserRepository(db)
 	ctx := context.Background()
 
 	// Create test user
@@ -536,8 +536,8 @@ func BenchmarkUserRepository_FindByID(b *testing.B) {
 
 func BenchmarkAddressRepository_IncrementUsage(b *testing.B) {
 	db := setupTestDB(&testing.T{})
-	addressRepo := postgres.NewAddressRepository(db)
-	userRepo := postgres.NewUserRepository(db)
+	addressRepo := infraPostgres.NewAddressRepository(db)
+	userRepo := infraPostgres.NewUserRepository(db)
 	ctx := context.Background()
 
 	// Create user and address
