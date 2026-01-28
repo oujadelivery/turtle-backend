@@ -177,23 +177,24 @@ func NewUser(
 	}
 
 	// Role-based contact validation
-	if primaryRole == RoleCaptain {
-		// Captains MUST have phone (for OTP login)
-		if phone == nil || *phone == "" {
-			return nil, errors.New("phone number is required for captains")
-		}
-		// Email is optional for captains
-	} else if primaryRole == RoleCustomer {
-		// Customers MUST have email (for Google/Apple login) OR phone
-		if email == nil && phone == nil {
-			return nil, errors.New("at least one contact method is required for customers")
-		}
-		// Note: Customers typically start with email (Google/Apple), phone is optional
-	} else if primaryRole == RoleAdmin {
-		// Admins MUST have email
-		if email == nil || *email == "" {
-			return nil, errors.New("email is required for admins")
-		}
+	switch primaryRole {
+		case RoleCaptain:
+			// Captains MUST have phone (for OTP login)
+			if phone == nil || *phone == "" {
+				return nil, errors.New("phone number is required for captains")
+			}
+			// Email is optional for captains
+		case RoleCustomer:
+			// Customers MUST have email (for Google/Apple login) OR phone
+			if email == nil && phone == nil {
+				return nil, errors.New("at least one contact method is required for customers")
+			}
+			// Note: Customers typically start with email (Google/Apple), phone is optional
+		case RoleAdmin:
+			// Admins MUST have email
+			if email == nil || *email == "" {
+				return nil, errors.New("email is required for admins")
+			}
 	}
 
 	now := time.Now()

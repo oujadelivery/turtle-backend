@@ -98,7 +98,7 @@ type OTPRepository interface {
 
 // OTPSession represents an OTP session (for repository)
 type OTPSession struct {
-	ID        int
+	ID        uint
 	Target    string
 	Code      string
 	Purpose   string
@@ -134,7 +134,7 @@ type RefreshTokenRepository interface {
 
 // RefreshToken represents a refresh token (for repository)
 type RefreshToken struct {
-	ID         int
+	ID         uint
 	UserID     string
 	Token      string
 	Device     string
