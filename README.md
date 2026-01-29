@@ -7,17 +7,17 @@ It is designed with clean architecture, scalability, and real-world startup prac
 
 ## Tech Stack
 
-| Layer         | Tech                             |
-| ------------- | -------------------------------- |
-| Language      | Go                               |
-| API           | GraphQL (gqlgen)                 |
-| Server        | Gin                              |
-| Database      | PostgreSQL                       |
-| ORM           | GORM                             |
-| Cache / Queue | Redis                            |
-| Auth          | JWT                              |
-| Logging       | Zap                              |
-| Config        | Multi-Env (.env.dev / .env.prod) |
+| Layer         | Tech                                        |
+| ------------- | ------------------------------------------- |
+| Language      | Go                                          |
+| API           | GraphQL (gqlgen)                            |
+| Server        | Gin                                         |
+| Database      | PostgreSQL                                  |
+| ORM           | GORM                                        |
+| Cache / Queue | Redis                                       |
+| Auth          | JWT (Rotating Access/Refresh)               |
+| Logging       | Zap                                         |
+| Config        | Multi-Env (.env.dev / .env.uat / .env.prod) |
 
 ---
 
@@ -29,11 +29,36 @@ config           → Environment loader
 db               → PostgreSQL connector
 models           → GORM models
 graph            → GraphQL schema & resolvers
-services         → Business logic
+services         → Business logic (auth, otp, etc)
 pkg              → Shared libraries (JWT etc)
 infra            → Logging, Redis, tracing
 queue            → Async background jobs
+middlewares      → HTTP & Auth middlewares
 ```
+
+---
+
+## Authentication Architecture
+
+| Feature                   | Implemented |
+| ------------------------- | ----------- |
+| Short-lived access tokens | ✅          |
+| Rotating refresh tokens   | ✅          |
+| Multi-device sessions     | ✅          |
+| Replay attack protection  | ✅          |
+| Forced logout             | ✅          |
+| OTP onboarding            | ✅          |
+| Redis backed infra        | ✅          |
+
+---
+
+## Auth Flows
+
+| Role     | Login Method               |
+| -------- | -------------------------- |
+| Customer | Apple / Google + Email OTP |
+| Captain  | Mobile number + OTP        |
+| Admin    | Firebase Identity + RBAC   |
 
 ---
 
@@ -47,7 +72,7 @@ queue            → Async background jobs
 
 ## Setup
 
-### 1. Clone the repository
+### 1. Clone repository
 
 ```bash
 git clone <your-repo-url>
@@ -74,6 +99,7 @@ Create `.env.dev`
 ```env
 DB_URL=host=localhost user=postgres password=postgres dbname=turtle_db_dev port=5432 sslmode=disable
 JWT_SECRET=supersecretkey
+REDIS_URL=localhost:6379
 ```
 
 ### 5. Run backend
@@ -82,13 +108,13 @@ JWT_SECRET=supersecretkey
 APP_ENV=dev go run cmd/api/main.go
 ```
 
-### 6. Open GraphQL Playground
+### 6. Open Playground
 
 http://localhost:8080
 
 ---
 
-## GraphQL API
+## GraphQL Examples
 
 ### Health
 
@@ -98,12 +124,29 @@ query {
 }
 ```
 
-### Social Login
+### Social Login + Send OTP + Verify OTP
 
 ```graphql
-mutation {
+mutation socialLogin {
   socialLogin(provider: GOOGLE, providerToken: "demo-token") {
-    token
+    accessToken
+    refreshToken
+    userId
+    role
+  }
+}
+
+mutation sendOTP {
+  sendOtp(target: "7543875613", purpose: "CUSTOMER_LOGIN")
+}
+
+mutation verifyOTP {
+  verifyOtp(target: "7543875613", code: "656014", purpose: "CUSTOMER_LOGIN") {
+    accessToken
+    refreshToken
+    userId
+    role
+    userId
   }
 }
 ```
@@ -123,9 +166,11 @@ mutation {
 
 ## Roadmap
 
-- JWT middleware
-- Role-based users (Customer / Captain / Admin)
-- Order creation
-- Captain matching
-- Live tracking
-- Payments & wallet settlement
+| Module            | Status |
+| ----------------- | ------ |
+| Authentication    | ✅     |
+| Orders            | ⏳     |
+| Captain Matching  | ⏳     |
+| Live Tracking     | ⏳     |
+| Wallet / Payments | ⏳     |
+| Admin APIs        | ⏳     |

@@ -13,13 +13,15 @@ var DB *gorm.DB
 
 func Connect() {
 	dsn := os.Getenv("DB_URL")
-
 	database, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Fatal("DB connection failed:", err)
+		panic(err)
 	}
-
-	database.AutoMigrate(&models.User{})
+	if database == nil {
+		panic("Database is nil")
+	}
+	database.AutoMigrate(&models.User{}, &models.RefreshToken{}, &models.OtpSession{})
 	DB = database
 	log.Println("PostgreSQL connected & migrated")
 }
+

@@ -2,21 +2,24 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
-	"turtle/config"
 
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/playground"
+	"github.com/rs/cors"
+
+	"turtle/config"
 	"turtle/db"
 	"turtle/graph"
 	"turtle/graph/generated"
 	"turtle/infra"
-
-	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/99designs/gqlgen/graphql/playground"
-	"github.com/gin-gonic/gin"
+	"turtle/middlewares"
 )
 
 func main() {
-	env := os.Getenv("APP_ENV")
+    // Load environment variables
+    env := os.Getenv("APP_ENV")
 	if env == "" {
 		env = "dev"
 	}
@@ -24,24 +27,52 @@ func main() {
 		infra.Log.Warn("No env file found, using OS env")
 	}
 
-	r := gin.Default()
-	infra.InitLogger()
-	defer infra.Log.Sync()
-	r.Use(gin.Recovery())
-	// r.SetTrustedProxies([]string{"127.0.0.1"})
+    // Initialize database
+    db.Connect()
+    log.Println("✅ Database connected")
 
-	db.Connect()
-	srv := handler.NewDefaultServer(
-		generated.NewExecutableSchema(
-			generated.Config{Resolvers: &graph.Resolver{}},
-		),
-	)
+    // Initialize Redis
+    infra.InitRedis()
 
-	r.POST("/query", gin.WrapH(srv))
-	r.GET("/", gin.WrapH(playground.Handler("GraphQL", "/query")))
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
-	})
+    // Create GraphQL server
+    srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{
+        Resolvers: &graph.Resolver{},
+    }))
 
-	log.Fatal(r.Run(":8080"))
+    // Setup CORS
+    c := cors.New(cors.Options{
+        AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:8080"},
+        AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+        AllowedHeaders:   []string{"Authorization", "Content-Type"},
+        AllowCredentials: true,
+    })
+
+    // Create router with middleware chain
+    mux := http.NewServeMux()
+
+    // GraphQL endpoint with auth middleware
+    graphqlHandler := middlewares.AuthMiddleware(srv)
+    mux.Handle("/query", graphqlHandler)
+
+    // Playground (no auth required)
+    mux.Handle("/", playground.Handler("GraphQL Playground", "/query"))
+
+    // Health check endpoint (no auth required)
+    mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(http.StatusOK)
+        w.Write([]byte("OK"))
+    })
+
+    // Wrap with CORS
+    handler := c.Handler(mux)
+
+    // Start server
+    port := os.Getenv("PORT")
+    if port == "" {
+        port = "8080"
+    }
+
+    log.Printf("🚀 Server ready at http://localhost:%s/", port)
+    log.Printf("🎮 Playground at http://localhost:%s/", port)
+    log.Fatal(http.ListenAndServe(":"+port, handler))
 }

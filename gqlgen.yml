@@ -1,5 +1,5 @@
 schema:
-  - graph/schema.graphqls
+  - graph/schema/*.graphqls
 
 exec:
   filename: graph/generated/generated.go
@@ -10,6 +10,12 @@ model:
   package: model
 
 resolver:
-  layout: single-file
-  filename: graph/resolver.go
+  layout: follow-schema
+  dir: graph
   package: graph
+  filename_template: "{name}.resolvers.go"
+
+autobind:
+  - "turtle/models"
+
+omit_slice_element_pointers: false
