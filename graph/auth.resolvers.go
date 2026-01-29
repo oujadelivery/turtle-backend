@@ -106,6 +106,7 @@ func (r *mutationResolver) VerifyOtp(ctx context.Context, target string, code st
 		return nil, ErrInvalidOTP
 	}
 
+	// Delete OTP after verification
 	if err := otp.DeleteOTP(target); err != nil {
 		fmt.Printf("Warning: failed to delete OTP for %s: %v\n", target, err)
 	}
@@ -115,21 +116,29 @@ func (r *mutationResolver) VerifyOtp(ctx context.Context, target string, code st
 
 	if purpose == PurposeCaptainLogin {
 		role = RoleCaptain
-		if err := db.DB.Where("phone = ?", target).FirstOrCreate(&user, models.User{
-			Phone:         target,
-			Role:          role,
-			PhoneVerified: true,
-			Status:        "ACTIVE",
-		}).Error; err != nil {
+		// Captain login: create or fetch by phone
+		if err := db.DB.Where("phone = ?", target).
+			FirstOrCreate(&user, models.User{
+				Phone:         target,
+				Role:          role,
+				PhoneVerified: true,
+				Status:        "ACTIVE",
+			}).
+			Omit("email", "provider", "provider_id", "email_verified").
+			Error; err != nil {
 			return nil, fmt.Errorf("failed to create captain: %w", err)
 		}
 	} else {
-		if err := db.DB.Where("email = ?", target).FirstOrCreate(&user, models.User{
-			Email:         target,
-			Role:          role,
-			EmailVerified: true,
-			Status:        "ACTIVE",
-		}).Error; err != nil {
+		// Customer login: create or fetch by phone
+		if err := db.DB.Where("phone = ?", target).
+			FirstOrCreate(&user, models.User{
+				Phone:         target,
+				Role:          role,
+				PhoneVerified: true,
+				Status:        "ACTIVE",
+			}).
+			Omit("email", "provider", "provider_id", "email_verified").
+			Error; err != nil {
 			return nil, fmt.Errorf("failed to create customer: %w", err)
 		}
 	}
