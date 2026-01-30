@@ -1,0 +1,22 @@
+# ============================================================================
+# CUSTOM SCALARS
+# Define special data types that aren't built into GraphQL
+# ============================================================================
+
+"""
+Time scalar represents date-time values in ISO 8601 format
+Example: "2024-01-29T10:30:00Z"
+"""
+scalar Time
+
+"""
+JSON scalar for arbitrary JSON data
+Used for flexible data structures like device info, metadata, etc.
+"""
+scalar JSON
+
+"""
+Upload scalar for file uploads
+Used for profile pictures, KYC documents, parcel images
+"""
+scalar Upload

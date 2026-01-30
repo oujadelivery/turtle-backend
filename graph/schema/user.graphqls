@@ -1,0 +1,454 @@
+# ============================================================================
+# USER
+# User profiles, captain management, wallet operations
+# ============================================================================
+
+# =========================
+# USER TYPES
+# =========================
+
+"""
+User represents a registered user (Customer, Captain, or Admin)
+Supports dual-role: one user can be both Customer and Captain
+"""
+type User {
+  """Unique user ID"""
+  id: ID!
+  
+  # Profile Information
+  """First name"""
+  firstName: String!
+  
+  """Last name"""
+  lastName: String!
+  
+  """Full name (computed)"""
+  fullName: String!
+  
+  """Profile picture URL"""
+  profilePic: String
+  
+  # Contact Information
+  """Email address"""
+  email: String
+  
+  """Email verification status"""
+  emailVerified: Boolean!
+  
+  """Phone number"""
+  phone: String
+  
+  """Phone verification status"""
+  phoneVerified: Boolean!
+  
+  # Role & Status
+  """Primary role (initial role)"""
+  primaryRole: UserRole!
+  
+  """All roles user has"""
+  roles: [UserRole!]!
+  
+  """Account status"""
+  status: UserStatus!
+  
+  # Wallet
+  """Wallet balance"""
+  walletBalance: Money!
+  
+  # Ratings & Stats
+  """Average rating (1-5)"""
+  rating: Float
+  
+  """Total number of ratings"""
+  totalRatings: Int!
+  
+  """Total orders placed (as customer)"""
+  totalOrders: Int!
+  
+  """Total deliveries completed (as captain)"""
+  totalDeliveries: Int!
+  
+  # Captain-specific fields (null if not captain)
+  """Captain profile (only if user has CAPTAIN role)"""
+  captainProfile: CaptainProfile
+  
+  # Admin-specific fields (null if not admin)
+  """Admin profile (only if user has ADMIN role)"""
+  adminProfile: AdminProfile
+  
+  # Timestamps
+  """Account creation time"""
+  createdAt: Time!
+  
+  """Last update time"""
+  updatedAt: Time!
+  
+  """Last activity time"""
+  lastActiveAt: Time
+}
+
+"""
+CaptainProfile contains captain-specific information
+"""
+type CaptainProfile {
+  # Vehicle Information
+  """Vehicle type"""
+  vehicleType: VehicleType
+  
+  """Vehicle registration number"""
+  vehicleNumber: String
+  
+  """Vehicle model"""
+  vehicleModel: String
+  
+  # License Information
+  """Driving license number"""
+  licenseNumber: String
+  
+  """License expiry date"""
+  licenseExpiry: Time
+  
+  # KYC Status
+  """KYC verification status"""
+  kycStatus: KYCStatus!
+  
+  """KYC documents"""
+  kycDocuments: [KYCDocument!]
+  
+  # Operational Status
+  """Whether captain is currently available for orders"""
+  isAvailable: Boolean!
+  
+  """Current location (if available)"""
+  currentLocation: Location
+  
+  """Last location update time"""
+  locationUpdatedAt: Time
+  
+  # Performance Metrics
+  """Order completion rate (0-100)"""
+  completionRate: Float!
+  
+  """Cancellation rate (0-100)"""
+  cancellationRate: Float!
+  
+  """On-time delivery rate (0-100)"""
+  onTimeRate: Float!
+  
+  # Timestamps
+  """Onboarding completion time"""
+  onboardedAt: Time
+  
+  """KYC verification time"""
+  verifiedAt: Time
+}
+
+"""
+KYC Document
+"""
+type KYCDocument {
+  """Document type"""
+  type: String!
+  
+  """Document URL"""
+  url: String!
+  
+  """Upload timestamp"""
+  uploadedAt: Time!
+}
+
+"""
+AdminProfile contains admin-specific information
+"""
+type AdminProfile {
+  """Admin permissions"""
+  permissions: [String!]!
+  
+  """Department"""
+  department: String!
+  
+  """Employee ID"""
+  employeeID: String
+}
+
+"""
+UserConnection for paginated user lists
+"""
+type UserConnection {
+  edges: [UserEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+"""
+UserEdge wraps user with cursor
+"""
+type UserEdge {
+  cursor: String!
+  node: User!
+}
+
+# =========================
+# USER ENUMS
+# =========================
+
+"""
+User roles
+"""
+enum UserRole {
+  CUSTOMER
+  CAPTAIN
+  ADMIN
+}
+
+"""
+User account status
+"""
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  PENDING_KYC
+  SUSPENDED
+  DEACTIVATED
+}
+
+"""
+KYC verification status
+"""
+enum KYCStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+"""
+Vehicle types for captains
+"""
+enum VehicleType {
+  BIKE
+  CAR
+  VAN
+  TRUCK
+}
+
+# =========================
+# USER INPUTS
+# =========================
+
+"""
+Input for updating user profile
+"""
+input UpdateProfileInput {
+  """First name"""
+  firstName: String
+  
+  """Last name"""
+  lastName: String
+  
+  """Profile picture"""
+  profilePic: Upload
+}
+
+"""
+Input for updating vehicle information
+"""
+input UpdateVehicleInput {
+  """Vehicle type"""
+  vehicleType: VehicleType!
+  
+  """Vehicle registration number"""
+  vehicleNumber: String!
+  
+  """Vehicle model"""
+  vehicleModel: String!
+}
+
+"""
+Input for submitting KYC documents
+"""
+input SubmitKYCInput {
+  """Driving license image"""
+  license: Upload!
+  
+  """Vehicle RC image"""
+  vehicleRC: Upload!
+  
+  """Profile photo"""
+  profilePhoto: Upload!
+  
+  """Additional documents"""
+  additionalDocs: [Upload!]
+}
+
+"""
+Input for going online as captain
+"""
+input GoOnlineInput {
+  """Current location"""
+  location: LocationInput!
+}
+
+"""
+Input for updating captain location
+"""
+input UpdateLocationInput {
+  """New location"""
+  location: LocationInput!
+}
+
+"""
+Input for user search
+"""
+input UserSearchInput {
+  """Search query (name, email, phone)"""
+  query: String
+  
+  """Filter by role"""
+  role: UserRole
+  
+  """Filter by status"""
+  status: UserStatus
+  
+  """Results per page"""
+  limit: Int = 20
+  
+  """Page offset"""
+  offset: Int = 0
+}
+
+# =========================
+# USER MUTATIONS
+# =========================
+
+extend type Mutation {
+  # ===== PROFILE MANAGEMENT =====
+  
+  """
+  Update user profile
+  """
+  updateProfile(input: UpdateProfileInput!): User! @auth
+  
+  # ===== CAPTAIN OPERATIONS =====
+  
+  """
+  Update vehicle information
+  Requires CAPTAIN role
+  """
+  updateVehicle(input: UpdateVehicleInput!): CaptainProfile! @auth(role: "CAPTAIN")
+  
+  """
+  Submit KYC documents for verification
+  Requires CAPTAIN role
+  """
+  submitKYC(input: SubmitKYCInput!): CaptainProfile! @auth(role: "CAPTAIN")
+  
+  """
+  Go online to accept orders
+  Requires CAPTAIN role and verified KYC
+  """
+  goOnline(input: GoOnlineInput!): Boolean! @auth(role: "CAPTAIN")
+  
+  """
+  Go offline (stop accepting orders)
+  Requires CAPTAIN role
+  """
+  goOffline: Boolean! @auth(role: "CAPTAIN")
+  
+  """
+  Update current location
+  Requires CAPTAIN role
+  """
+  updateLocation(input: UpdateLocationInput!): Boolean! @auth(role: "CAPTAIN")
+  
+  # ===== ADMIN OPERATIONS =====
+  
+  """
+  Approve captain KYC
+  Requires ADMIN role
+  """
+  approveKYC(captainID: ID!, reason: String): User! @auth(role: "ADMIN")
+  
+  """
+  Reject captain KYC
+  Requires ADMIN role
+  """
+  rejectKYC(captainID: ID!, reason: String!): User! @auth(role: "ADMIN")
+  
+  """
+  Block user account
+  Requires ADMIN role
+  """
+  blockUser(userID: ID!, reason: String!): User! @auth(role: "ADMIN")
+  
+  """
+  Unblock user account
+  Requires ADMIN role
+  """
+  unblockUser(userID: ID!): User! @auth(role: "ADMIN")
+}
+
+# =========================
+# USER QUERIES
+# =========================
+
+extend type Query {
+  """
+  Get user by ID
+  Requires authentication
+  """
+  user(id: ID!): User @auth
+  
+  """
+  Search users
+  Requires ADMIN role
+  """
+  searchUsers(input: UserSearchInput!): UserConnection! @auth(role: "ADMIN")
+  
+  """
+  Get captains pending KYC verification
+  Requires ADMIN role
+  """
+  pendingKYCCaptains(limit: Int = 20, offset: Int = 0): UserConnection! @auth(role: "ADMIN")
+  
+  """
+  Find nearby captains
+  Used for order matching
+  """
+  nearbyCaptains(latitude: Float!, longitude: Float!, radiusKm: Float = 5.0): [User!]!
+  
+  """
+  Get user statistics
+  Requires ADMIN role
+  """
+  userStats: UserStats! @auth(role: "ADMIN")
+}
+
+# =========================
+# USER STATISTICS
+# =========================
+
+"""
+UserStats provides aggregated user statistics
+"""
+type UserStats {
+  """Total users"""
+  totalUsers: Int!
+  
+  """Total customers"""
+  totalCustomers: Int!
+  
+  """Total captains"""
+  totalCaptains: Int!
+  
+  """Total admins"""
+  totalAdmins: Int!
+  
+  """Active users (last 7 days)"""
+  activeUsers: Int!
+  
+  """Verified captains"""
+  verifiedCaptains: Int!
+  
+  """Online captains"""
+  onlineCaptains: Int!
+}

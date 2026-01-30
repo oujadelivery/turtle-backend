@@ -130,6 +130,14 @@ type CaptainProfile struct {
 	verifiedAt  *time.Time
 }
 
+type UserStats struct {
+	TotalUsers       int64
+	TotalCustomers   int64
+	TotalCaptains    int64
+	TotalAdmins      int64
+	ActiveUsers      int64
+	VerifiedCaptains int64
+}
 // CaptainProfile getter methods
 func (cp *CaptainProfile) KYCStatus() KYCStatus {
 	if cp == nil {
@@ -506,8 +514,8 @@ func (u *User) SubmitKYCDocuments(documents map[string]string) error {
 	return nil
 }
 
-// ApproveKYC approves captain KYC (admin action)
-func (u *User) ApproveKYC() error {
+// ApproveKyc approves captain KYC (admin action)
+func (u *User) ApproveKyc() error {
 	if !u.IsCaptain() {
 		return errors.New("user is not a captain")
 	}
@@ -528,8 +536,8 @@ func (u *User) ApproveKYC() error {
 	return nil
 }
 
-// RejectKYC rejects captain KYC (admin action)
-func (u *User) RejectKYC(reason string) error {
+// RejectKyc rejects captain KYC (admin action)
+func (u *User) RejectKyc(reason string) error {
 	if !u.IsCaptain() {
 		return errors.New("user is not a captain")
 	}

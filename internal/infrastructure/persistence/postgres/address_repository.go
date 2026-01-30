@@ -454,16 +454,9 @@ func (r *AddressRepository) SearchAddresses(ctx context.Context, userID, query s
 // STATISTICS
 // ============================================================================
 
-// GetAddressStats returns aggregated address statistics for a user
-type AddressStats struct {
-	TotalAddresses  int64
-	DefaultAddress  *aggregates.Address
-	MostUsedAddress *aggregates.Address
-	RecentAddresses []*aggregates.Address
-}
 
-func (r *AddressRepository) GetAddressStats(ctx context.Context, userID string) (*AddressStats, error) {
-	stats := &AddressStats{}
+func (r *AddressRepository) GetAddressStats(ctx context.Context, userID string) (*domain.AddressStats, error) {
+	stats := &domain.AddressStats{}
 
 	// Total addresses
 	r.db.WithContext(ctx).
@@ -508,20 +501,9 @@ func (r *AddressRepository) GetAddressStats(ctx context.Context, userID string) 
 	return stats, nil
 }
 
-// GetUsagePatterns returns usage patterns for ML/analytics
-type UsagePattern struct {
-	AddressID           string
-	TotalUsage          int
-	MorningPercentage   float64
-	AfternoonPercentage float64
-	EveningPercentage   float64
-	NightPercentage     float64
-	WeekdayPercentage   float64
-	WeekendPercentage   float64
-	AverageGap          float64 // Average days between uses
-}
 
-func (r *AddressRepository) GetUsagePatterns(ctx context.Context, userID string) ([]UsagePattern, error) {
+
+func (r *AddressRepository) GetUsagePatterns(ctx context.Context, userID string) ([]domain.UsagePattern, error) {
 	query := `
 		SELECT 
 			id as address_id,
@@ -544,7 +526,7 @@ func (r *AddressRepository) GetUsagePatterns(ctx context.Context, userID string)
 		ORDER BY usage_count DESC
 	`
 
-	var patterns []UsagePattern
+	var patterns []domain.UsagePattern
 	err := r.db.WithContext(ctx).Raw(query, userID).Scan(&patterns).Error
 
 	if err != nil {

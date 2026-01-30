@@ -27,7 +27,7 @@ type UserRepository interface {
 	Update(ctx context.Context, user *aggregates.User) error
 
 	// UpdateWallet updates user wallet balance (with optimistic locking)
-	UpdateWallet(ctx context.Context, userID string, expectedVersion int, newBalance int64) error
+	UpdateWallet(ctx context.Context, userID string, expectedVersion int64, newBalance int64) error
 
 	// Delete soft deletes a user
 	Delete(ctx context.Context, id string) error
@@ -43,6 +43,22 @@ type UserRepository interface {
 
 	// Search searches users by name, email, or phone
 	Search(ctx context.Context, query string, role string, limit, offset int) ([]*aggregates.User, int64, error)
+
+	// HealthCheck verifies database connectivity
+	HealthCheck(ctx context.Context) error
+
+	// GetUserStats returns aggregated user statistics
+	GetUserStats(ctx context.Context) (*UserStats, error)
+}
+
+// UserStats represents aggregated user statistics
+type UserStats struct {
+	TotalUsers       int64
+	TotalCustomers   int64
+	TotalCaptains    int64
+	TotalAdmins      int64
+	ActiveUsers      int64
+	VerifiedCaptains int64
 }
 
 // AddressRepository defines the interface for address persistence
@@ -76,6 +92,20 @@ type AddressRepository interface {
 
 	// FindNearest finds nearest addresses to given location
 	FindNearest(ctx context.Context, userID string, lat, lng float64, limit int) ([]*aggregates.Address, error)
+
+	// SearchAddresses searches addresses with pagination
+	SearchAddresses(ctx context.Context, userID string, query string, limit, offset int) ([]*aggregates.Address, int64, error)
+
+	// GetAddressStats returns address statistics for a user
+	GetAddressStats(ctx context.Context, userID string) (*AddressStats, error)
+}
+
+// AddressStats represents address usage statistics
+type AddressStats struct {
+	TotalAddresses  int64
+	MostUsedAddress *aggregates.Address
+	DefaultAddress  *aggregates.Address
+	RecentAddresses []*aggregates.Address
 }
 
 // OTPRepository defines the interface for OTP session persistence
@@ -119,6 +149,9 @@ type RefreshTokenRepository interface {
 	// FindByUserID finds all refresh tokens for a user
 	FindByUserID(ctx context.Context, userID string) ([]*RefreshToken, error)
 
+	// FindActiveByUserID finds all active (non-revoked) refresh tokens for a user
+	FindActiveByUserID(ctx context.Context, userID string) ([]*RefreshToken, error)
+
 	// UpdateLastUsed updates the last used timestamp
 	UpdateLastUsed(ctx context.Context, token string) error
 
@@ -144,4 +177,16 @@ type RefreshToken struct {
 	CreatedAt  time.Time
 	ExpiresAt  time.Time
 	LastUsedAt *time.Time
+}
+// GetUsagePatterns returns usage patterns for ML/analytics
+type UsagePattern struct {
+	AddressID           string
+	TotalUsage          int
+	MorningPercentage   float64
+	AfternoonPercentage float64
+	EveningPercentage   float64
+	NightPercentage     float64
+	WeekdayPercentage   float64
+	WeekendPercentage   float64
+	AverageGap          float64 // Average days between uses
 }

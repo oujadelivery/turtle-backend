@@ -165,7 +165,7 @@ func TestUserRepository_CaptainSearch(t *testing.T) {
 		// Approve KYC
 		docs := map[string]string{"LICENSE": "url", "VEHICLE_RC": "url", "PROFILE_PHOTO": "url"}
 		captain.SubmitKYCDocuments(docs)
-		captain.ApproveKYC()
+		captain.ApproveKyc()
 
 		// Go online at different locations
 		lat := 17.385 + (float64(i) * 0.01)

@@ -1,0 +1,228 @@
+# ============================================================================
+# COMMON TYPES
+# Shared types used across different features
+# ============================================================================
+
+# =========================
+# PAGINATION
+# =========================
+
+"""
+PageInfo contains pagination metadata
+"""
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+  total: Int!
+}
+
+# =========================
+# ERROR HANDLING
+# =========================
+
+"""
+Error represents a structured error response
+Provides client-friendly error messages and codes
+"""
+type Error {
+  """Error code for programmatic handling"""
+  code: String!
+  
+  """Human-readable error message"""
+  message: String!
+  
+  """Optional field that caused the error"""
+  field: String
+  
+  """Additional error details"""
+  details: JSON
+}
+
+"""
+ValidationError for input validation failures
+"""
+type ValidationError {
+  field: String!
+  message: String!
+  code: String!
+}
+
+# =========================
+# MONEY
+# =========================
+
+"""
+Money represents a monetary value with currency
+Always stored in smallest unit (paise for INR, cents for USD)
+"""
+type Money {
+  """Amount in smallest unit (e.g., paise, cents)"""
+  amount: Int!
+  
+  """ISO 4217 currency code (e.g., INR, USD)"""
+  currency: String!
+  
+  """Amount in major unit for display (e.g., rupees, dollars)"""
+  displayAmount: Float!
+  
+  """Formatted string for display (e.g., "₹50.99")"""
+  formatted: String!
+}
+
+"""
+Input for monetary values
+"""
+input MoneyInput {
+  """Amount in major unit (e.g., rupees, dollars)"""
+  amount: Float!
+  
+  """ISO 4217 currency code"""
+  currency: String!
+}
+
+# =========================
+# LOCATION
+# =========================
+
+"""
+Location represents geographic coordinates
+"""
+type Location {
+  """Latitude (-90 to 90)"""
+  latitude: Float!
+  
+  """Longitude (-180 to 180)"""
+  longitude: Float!
+  
+  """Formatted address if available"""
+  address: String
+}
+
+"""
+Input for location data
+"""
+input LocationInput {
+  latitude: Float!
+  longitude: Float!
+}
+
+# =========================
+# CONTACT INFO
+# =========================
+
+"""
+ContactInfo for non-user contacts (pickup/delivery persons)
+"""
+type ContactInfo {
+  name: String!
+  phone: String!
+  formattedPhone: String!
+}
+
+"""
+Input for contact information
+"""
+input ContactInfoInput {
+  name: String!
+  phone: String!
+}
+
+# =========================
+# COMMON ENUMS
+# =========================
+
+"""
+Status enum for various entities
+"""
+enum Status {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+  SUSPENDED
+  PENDING
+  DELETED
+}
+
+"""
+Sort order for lists
+"""
+enum SortOrder {
+  ASC
+  DESC
+}
+
+"""
+Device type for authentication
+"""
+enum DeviceType {
+  IOS
+  ANDROID
+  WEB
+}
+
+# =========================
+# FILE UPLOAD
+# =========================
+
+"""
+File represents an uploaded file
+"""
+type File {
+  """Unique file ID"""
+  id: ID!
+  
+  """Original filename"""
+  filename: String!
+  
+  """File MIME type"""
+  mimetype: String!
+  
+  """File size in bytes"""
+  size: Int!
+  
+  """URL to access the file"""
+  url: String!
+  
+  """Upload timestamp"""
+  uploadedAt: Time!
+}
+
+# =========================
+# DIRECTIVES
+# =========================
+
+"""
+Requires authentication to access this field/type
+"""
+directive @auth(
+  """Required role (optional)"""
+  role: String
+) on FIELD_DEFINITION | OBJECT
+
+"""
+Rate limiting directive
+"""
+directive @rateLimit(
+  """Maximum requests"""
+  limit: Int!
+  
+  """Time window in seconds"""
+  window: Int!
+) on FIELD_DEFINITION
+
+"""
+Requires specific permissions
+"""
+directive @hasPermission(
+  permissions: [String!]!
+) on FIELD_DEFINITION
+
+"""
+Marks field as deprecated with migration info"""
+directive @deprecated(
+  reason: String!
+  migrateFrom: String
+  migrateTo: String
+) on FIELD_DEFINITION | ENUM_VALUE

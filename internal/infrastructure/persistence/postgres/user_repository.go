@@ -50,6 +50,27 @@ func (r *UserRepository) Create(ctx context.Context, user *aggregates.User) erro
 }
 
 // ============================================================================
+// HEALTH CHECK
+// ============================================================================
+
+// HealthCheck verifies database connectivity
+func (r *UserRepository) HealthCheck(ctx context.Context) error {
+	// Use a simple query to check if database is accessible
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&UserModel{}).
+		Limit(1).
+		Count(&count).
+		Error
+	
+	if err != nil {
+		return fmt.Errorf("database health check failed: %w", err)
+	}
+	
+	return nil
+}
+
+// ============================================================================
 // READ
 // ============================================================================
 
@@ -462,18 +483,8 @@ func (r *UserRepository) FindByIDs(ctx context.Context, ids []string) ([]*aggreg
 // STATISTICS
 // ============================================================================
 
-// GetUserStats returns aggregated user statistics
-type UserStats struct {
-	TotalUsers       int64
-	TotalCustomers   int64
-	TotalCaptains    int64
-	TotalAdmins      int64
-	ActiveUsers      int64
-	VerifiedCaptains int64
-}
-
-func (r *UserRepository) GetUserStats(ctx context.Context) (*UserStats, error) {
-	var stats UserStats
+func (r *UserRepository) GetUserStats(ctx context.Context) (*domain.UserStats, error) {
+	var stats domain.UserStats
 
 	// Total users
 	r.db.WithContext(ctx).
