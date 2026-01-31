@@ -128,13 +128,13 @@ turtle-backend/
 ---
 
 ### ⏳ Phase 3: GraphQL API (Week 5-6)
-**Priority**: HIGH | **Status**: Not Started
+**Priority**: HIGH | **Status**: Week 5 completed
 
 #### Week 5: Core API
-- [ ] GraphQL schema (.graphqls files)
-- [ ] Authentication resolvers (login, signup, OTP)
-- [ ] User & Address resolvers (CRUD operations)
-- [ ] Middleware (auth, rate limiting, logging)
+- [x] GraphQL schema (.graphqls files)
+- [x] Authentication resolvers (login, signup, OTP)
+- [x] User & Address resolvers (CRUD operations)
+- [x] Middleware (auth, rate limiting, logging)
 
 #### Week 6: Advanced Features
 - [ ] DataLoader (N+1 prevention)

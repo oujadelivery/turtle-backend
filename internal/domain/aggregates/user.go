@@ -269,9 +269,29 @@ func (u *User) CaptainProfile() *CaptainProfile     { return u.captainProfile }
 func (u *User) AdminProfile() *AdminProfile         { return u.adminProfile }
 func (u *User) CreatedAt() time.Time                { return u.createdAt }
 func (u *User) UpdatedAt() time.Time                { return u.updatedAt }
+func (u *User) DeletedAt() *time.Time               { return u.deletedAt }
 func (u *User) PendingEvents() []events.DomainEvent { return u.pendingEvents }
+func (u *User) ProviderID() *string                 { return u.providerID }
+func (u *User) Provider() string                    { return u.provider }
+func (u *User) LastActiveAt() *time.Time            { return u.lastActiveAt}
+func (u *User) WalletVersion() int                  { return u.walletVersion }
+func (u *User) TotalOrders() int                    { return u.totalOrders }
+func (u *User) TotalDeliveries() int                { return u.totalDeliveries }
 
 // Business methods
+
+// SetProviderID sets the provider ID for social login
+func (u *User) SetProviderID(providerID string) {
+	if providerID != "" {
+		u.providerID = &providerID
+		u.updatedAt = time.Now()
+	}
+}
+
+// HasProviderInfo returns true if user has provider authentication set up
+func (u *User) HasProviderInfo() bool {
+	return u.provider != "" && u.providerID != nil
+}
 
 // UpdateProfile updates user profile information
 func (u *User) UpdateProfile(firstName, lastName, profilePic string) error {
@@ -297,6 +317,39 @@ func (u *User) VerifyEmail() {
 	u.version++
 
 	u.addEvent(events.NewUserEmailVerifiedEvent(u.id))
+}
+func (u *User) SetProfilePicDirect(profilePic string) {
+	u.profilePic = profilePic
+}
+
+// VerifyEmailDirect marks email as verified without incrementing version
+// This is ONLY for new users before first save (e.g., social login)
+func (u *User) VerifyEmailDirect() {
+	u.emailVerified = true
+}
+// VerifyPhoneDirect marks phone as verified without incrementing version
+// Use this ONLY when reconstructing from database
+func (u *User) VerifyPhoneDirect() {
+	u.phoneVerified = true
+}
+
+// AddRoleDirect adds a role without incrementing version or validation
+// Use this ONLY when reconstructing from database
+func (u *User) AddRoleDirect(role UserRole) {
+	// Check if role already exists
+	for _, r := range u.roles {
+		if r == role {
+			return // Already has role
+		}
+	}
+	
+	u.roles = append(u.roles, role)
+}
+
+// SetVersionDirect sets the version from database
+// Use this ONLY when reconstructing from database to restore the actual DB version
+func (u *User) SetVersionDirect(version int) {
+	u.version = version
 }
 
 // AddPhoneNumber adds a phone number to user account (for customers who signed up with email)
@@ -420,7 +473,6 @@ func (u *User) Unblock() error {
 func (u *User) UpdateLastActive() {
 	now := time.Now()
 	u.lastActiveAt = &now
-	// Don't increment version or updatedAt for this lightweight operation
 }
 
 // Wallet operations

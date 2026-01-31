@@ -17,7 +17,7 @@ import (
 
 	"turtle/config"
 	"turtle/graph"
-	"turtle/graph/generated" // ✅ Add this import for generated schema
+	"turtle/graph/generated"
 	"turtle/internal/application/usecases"
 	"turtle/internal/infrastructure/cache"
 	"turtle/internal/infrastructure/database"
@@ -43,6 +43,11 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer database.Close()
+
+	// 🆕 RUN MIGRATIONS (with environment-aware error handling)
+	if err := database.MigrateDatabase(database.GetDB(), cfg.IsDevelopment()); err != nil {
+		log.Fatalf("Failed to run migrations: %v", err)
+	}
 
 	// Connect to Redis
 	err = cache.Connect(cfg)
@@ -90,45 +95,36 @@ func main() {
 		KeepAlivePingInterval: 10 * time.Second,
 	})
 
-	// Add POST transport
+	// Add transports
 	srv.AddTransport(transport.POST{})
-
-	// Add GET transport (for playground)
 	srv.AddTransport(transport.GET{})
 
 	// Setup HTTP routes
-	mux := http.NewServeMux()
-
-	// GraphQL endpoint
-	mux.Handle("/graphql", createGraphQLHandler(srv, cfg))
-
-	// GraphQL Playground (only in development)
-	if cfg.IsDevelopment() {
-		mux.Handle("/", playground.Handler("GraphQL Playground", "/graphql"))
-		log.Println("🎮 GraphQL Playground: http://localhost:" + cfg.Server.Port)
-	}
-
-	// Health check endpoint
-	mux.HandleFunc("/health", healthCheckHandler)
+	http.Handle("/graphql", createGraphQLHandler(srv, cfg))
+	http.Handle("/", playground.Handler("GraphQL Playground", "/graphql"))
+	http.HandleFunc("/health", healthCheckHandler)
 
 	// Create HTTP server
 	server := &http.Server{
-		Addr:         ":" + cfg.Server.Port,
-		Handler:      mux,
+		Addr:         fmt.Sprintf(":%s", cfg.Server.Port),
+		Handler:      nil, // Use DefaultServeMux
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
-	// Start server in goroutine
+	// Start server
 	go func() {
-		log.Printf("🚀 Server starting on http://localhost:%s/graphql\n", cfg.Server.Port)
+		log.Printf("🚀 Server starting on http://localhost:%s", cfg.Server.Port)
+		log.Printf("🎮 GraphQL Playground: http://localhost:%s", cfg.Server.Port)
+		log.Printf("💚 Health check: http://localhost:%s/health", cfg.Server.Port)
+
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed: %v", err)
+			log.Fatalf("Server failed to start: %v", err)
 		}
 	}()
 
-	// Wait for interrupt signal for graceful shutdown
+	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -161,12 +157,17 @@ func createGraphQLHandler(srv *handler.Server, cfg *config.Config) http.Handler 
 	// Request ID
 	h = middleware.RequestIDMiddleware()(h)
 
-	// Rate limiting
-	cacheService := &CacheAdapter{}
-	h = middleware.RateLimitMiddleware(cacheService, 60, time.Minute)(h)
+	if cfg.IsProduction() {
+		// Rate limiting
+		cacheService := &CacheAdapter{}
+		h = middleware.RateLimitMiddleware(cacheService, 60, time.Minute)(h)
 
-	// Operation-specific rate limiting
-	h = middleware.OperationRateLimiter(cacheService, middleware.DefaultOperationLimits())(h)
+		// Operation-specific rate limiting
+		h = middleware.OperationRateLimiter(cacheService, middleware.DefaultOperationLimits())(h)
+	} else {
+		// ⭐ In development, log that rate limiting is disabled
+		log.Println("⚠️  Rate limiting DISABLED in development mode")
+	}
 
 	// Authentication (optional - sets context if token present)
 	h = middleware.AuthMiddleware()(h)
@@ -188,35 +189,26 @@ func createGraphQLHandler(srv *handler.Server, cfg *config.Config) http.Handler 
 func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	// Check database health
 	dbErr := database.HealthCheck(r.Context())
-	
+
 	// Check Redis health
 	cacheErr := cache.HealthCheck(r.Context())
 
 	healthy := dbErr == nil && cacheErr == nil
 
 	status := "healthy"
-	code := http.StatusOK
 	if !healthy {
 		status = "unhealthy"
-		code = http.StatusServiceUnavailable
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	
-	response := fmt.Sprintf(`{
-		"status": "%s",
-		"timestamp": "%s",
-		"services": {
-			"database": %t,
-			"cache": %t
-		}
-	}`, status, time.Now().Format(time.RFC3339), dbErr == nil, cacheErr == nil)
-	
-	w.Write([]byte(response))
+	if !healthy {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+
+	fmt.Fprintf(w, `{"status":"%s","database":"%v","cache":"%v"}`, status, dbErr == nil, cacheErr == nil)
 }
 
-// CacheAdapter adapts cache.Client to graph.CacheService interface
+// CacheAdapter adapts cache service for GraphQL
 type CacheAdapter struct{}
 
 func (c *CacheAdapter) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {

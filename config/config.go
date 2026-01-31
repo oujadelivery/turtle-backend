@@ -77,7 +77,7 @@ func Load() (*Config, error) {
 			Host:            getEnv("DB_HOST", "localhost"),
 			Port:            getEnvAsInt("DB_PORT", 5432),
 			User:            getEnv("DB_USER", "postgres"),
-			Password:        getEnv("DB_PASSWORD", ""),
+			Password:        getEnv("DB_PASSWORD", "postgres"),
 			Database:        getEnv("DB_NAME", "turtle_db_dev"),
 			SSLMode:         getEnv("DB_SSL_MODE", "disable"),
 			MaxOpenConns:    getEnvAsInt("DB_MAX_OPEN_CONNS", 25),

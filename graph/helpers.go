@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"turtle/internal/domain"
@@ -80,6 +81,7 @@ func determineAddressSuggestionReason(addr *aggregates.Address) string {
 // ============================================================================
 
 // handleError converts domain errors to GraphQL errors
+// handleError converts domain errors to GraphQL errors
 func handleError(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
@@ -90,7 +92,7 @@ func handleError(ctx context.Context, err error) error {
 		return err
 	}
 
-	// Handle domain errors
+	// Handle domain errors with proper codes
 	if appErr, ok := pkgErrors.GetAppError(err); ok {
 		return &gqlerror.Error{
 			Message: appErr.Message,
@@ -122,27 +124,48 @@ func handleError(ctx context.Context, err error) error {
 		}
 	case domain.ErrConcurrentModification:
 		return &gqlerror.Error{
-			Message: "Resource was modified by another request",
+			Message: "Resource was modified by another request. Please try again.",
 			Extensions: map[string]interface{}{
 				"code": "CONCURRENT_MODIFICATION",
 			},
 			Path: graphql.GetPath(ctx),
 		}
-	default:
-		// Log the actual error for debugging
-		fmt.Printf("Unhandled error: %v\n", err)
-		
-		return &gqlerror.Error{
-			Message: "An internal error occurred",
-			Extensions: map[string]interface{}{
-				"code": "INTERNAL_ERROR",
-			},
-			Path: graphql.GetPath(ctx),
-		}
+	}
+
+	// ⭐ FIX: Return actual error message instead of generic message
+	errorMessage := err.Error()
+	errorCode := "INTERNAL_ERROR"
+	errMsg := strings.ToLower(errorMessage)
+	
+	// Classify error by message content
+	if strings.Contains(errMsg, "rate limit") || strings.Contains(errMsg, "too many") {
+		errorCode = "RATE_LIMIT_EXCEEDED"
+	} else if strings.Contains(errMsg, "unauthorized") || strings.Contains(errMsg, "not authenticated") {
+		errorCode = "UNAUTHENTICATED"
+	} else if strings.Contains(errMsg, "required") || strings.Contains(errMsg, "invalid") || strings.Contains(errMsg, "must") {
+		errorCode = "BAD_REQUEST"
+	} else if strings.Contains(errMsg, "forbidden") || strings.Contains(errMsg, "permission") {
+		errorCode = "FORBIDDEN"
+	} else if strings.Contains(errMsg, "not found") {
+		errorCode = "NOT_FOUND"
+	} else if strings.Contains(errMsg, "already exists") || strings.Contains(errMsg, "duplicate") {
+		errorCode = "ALREADY_EXISTS"
+	}
+
+	// Log for debugging
+	fmt.Printf("GraphQL Error [%s]: %v\n", errorCode, err)
+
+	// ⭐ Return actual error message to client
+	return &gqlerror.Error{
+		Message: errorMessage,  // ⭐ Changed from "An internal error occurred"
+		Extensions: map[string]interface{}{
+			"code": errorCode,
+		},
+		Path: graphql.GetPath(ctx),
 	}
 }
 
-	const (
+const (
 	// Version of the API
 	APIVersion = "v1.0.0"
 )

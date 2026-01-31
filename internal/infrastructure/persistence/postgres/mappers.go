@@ -17,6 +17,9 @@ import (
 // UserToDomain converts database UserModel to domain User aggregate
 // Note: This uses a reconstruction pattern that bypasses domain validations
 // for loading existing entities from the database
+// UserToDomain converts database UserModel to domain User aggregate
+// Note: This uses a reconstruction pattern that bypasses domain validations
+// for loading existing entities from the database
 func UserToDomain(model *UserModel) (*aggregates.User, error) {
 	if model == nil {
 		return nil, nil
@@ -36,27 +39,34 @@ func UserToDomain(model *UserModel) (*aggregates.User, error) {
 		return nil, fmt.Errorf("failed to create domain user: %w", err)
 	}
 
-	// Restore verification status
+	// ⭐ Set provider ID (doesn't increment version)
+	if model.ProviderID != nil {
+		user.SetProviderID(*model.ProviderID)
+	}
+
+	// ⭐ Restore verification status using Direct methods (don't increment version)
 	if model.EmailVerified && !user.EmailVerified() {
-		user.VerifyEmail()
+		user.VerifyEmailDirect()  // ⭐ Changed from VerifyEmail()
 	}
 	if model.PhoneVerified && !user.PhoneVerified() {
-		user.VerifyPhone()
+		user.VerifyPhoneDirect()  // ⭐ Changed from VerifyPhone()
 	}
 
-	// Restore profile picture
+	// ⭐ Restore profile picture using Direct method (doesn't increment version)
 	if model.ProfilePic != "" {
-		user.UpdateProfile(model.FirstName, model.LastName, model.ProfilePic)
+		user.SetProfilePicDirect(model.ProfilePic)  // ⭐ Changed from UpdateProfile()
 	}
 
-	// Restore additional roles
+	// ⭐ Restore additional roles (only add if not already present)
 	for _, roleStr := range model.Roles {
 		role := aggregates.UserRole(roleStr)
 		if !user.HasRole(role) {
-			// Add role without domain validation for reconstruction
-			user.AddRole(role)
+			user.AddRoleDirect(role) 
 		}
 	}
+
+	// ⭐ Restore version from database (CRITICAL!)
+	user.SetVersionDirect(model.Version)
 
 	// Note: Wallet balance, ratings, and other stats are managed through
 	// specific repository methods (UpdateWallet, UpdateRating, etc.)
@@ -86,22 +96,31 @@ func DomainToUser(user *aggregates.User) (*UserModel, error) {
 	}
 
 	model := &UserModel{
-		ID:             user.ID(),
-		Version:        user.Version(),
-		FirstName:      user.FirstName(),
-		LastName:       user.LastName(),
-		ProfilePic:     user.ProfilePic(),
-		Email:          user.Email(),
-		EmailVerified:  user.EmailVerified(),
-		Phone:          user.Phone(),
-		PhoneVerified:  user.PhoneVerified(),
-		PrimaryRole:    string(user.PrimaryRole()),
-		Roles:          pq.StringArray(roles),
-		Status:         string(user.Status()),
-		WalletBalance:  user.WalletBalance().Amount(),
-		WalletCurrency: user.WalletBalance().Currency(),
-		CreatedAt:      user.CreatedAt(),
-		UpdatedAt:      user.UpdatedAt(),
+		ID:              user.ID(),
+		Version:         user.Version(),
+		FirstName:       user.FirstName(),
+		LastName:        user.LastName(),
+		ProfilePic:      user.ProfilePic(),
+		Email:           user.Email(),
+		EmailVerified:   user.EmailVerified(),
+		Phone:           user.Phone(),
+		PhoneVerified:   user.PhoneVerified(),
+		PrimaryRole:     string(user.PrimaryRole()),
+		Roles:           pq.StringArray(roles),
+		Status:          string(user.Status()),
+		Provider:        user.Provider(),        
+		ProviderID:      user.ProviderID(),      
+		WalletBalance:   user.WalletBalance().Amount(),
+		WalletCurrency:  user.WalletBalance().Currency(),
+		WalletVersion:   user.WalletVersion(),   
+		TotalOrders:     user.TotalOrders(),     
+		TotalDeliveries: user.TotalDeliveries(), 
+		Rating:          user.Rating(),          
+		TotalRatings:    user.TotalRatings(),    
+		LastActiveAt:    user.LastActiveAt(),    
+		CreatedAt:       user.CreatedAt(),
+		UpdatedAt:       user.UpdatedAt(),
+		DeletedAt:       user.DeletedAt(),       
 	}
 
 	// Handle captain profile
