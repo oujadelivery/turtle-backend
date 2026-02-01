@@ -306,8 +306,8 @@ func (s *AuthenticationService) VerifyOTPAndLogin(ctx context.Context, input Ver
 	if user == nil {
 		// New captain - create account
 		user, err = aggregates.NewUser(
-			"", // Will be generated
-			"",
+			uuid.New().String(), // Will be generated
+			"Surya",
 			"",
 			nil, // Email is optional for captains
 			&input.Phone,
@@ -626,4 +626,41 @@ func (s *AuthenticationService) Logout(ctx context.Context, refreshToken string)
 	// (requires passing access token as well)
 
 	return nil
+}
+
+// Add to AuthenticationService
+
+// GetActiveSessions returns all active sessions for a user
+func (s *AuthenticationService) GetActiveSessions(ctx context.Context, userID string) ([]*domain.RefreshToken, error) {
+    return s.refreshTokenRepo.FindActiveByUserID(ctx, userID)
+}
+
+// RevokeAllSessions revokes all sessions for a user
+func (s *AuthenticationService) RevokeAllSessions(ctx context.Context, userID string) error {
+    return s.refreshTokenRepo.RevokeAllForUser(ctx, userID)
+}
+
+// RevokeSession revokes a specific session
+// func (s *AuthenticationService) RevokeSession(ctx context.Context, userID, tokenID string) error {
+//     return s.refreshTokenRepo.Revoke(ctx, userID)
+// }
+
+// RevokeSessionByDevice revokes all sessions for a specific device
+// func (s *AuthenticationService) RevokeSessionByDevice(ctx context.Context, userID, deviceType string) error {
+//     return s.refreshTokenRepo.RevokeByDevice(ctx, userID, deviceType)
+// }
+
+// RevokeSession revokes a specific refresh token session
+func (s *AuthenticationService) RevokeSession(ctx context.Context, userID, refreshToken string) error {
+	// Verify token belongs to user before revoking
+	token, err := s.refreshTokenRepo.FindByToken(ctx, refreshToken)
+	if err != nil {
+		return fmt.Errorf("token not found: %w", err)
+	}
+	
+	if token.UserID != userID {
+		return errors.New("token does not belong to user")
+	}
+	
+	return s.refreshTokenRepo.Revoke(ctx, refreshToken)
 }

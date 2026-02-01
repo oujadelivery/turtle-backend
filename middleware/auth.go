@@ -36,11 +36,13 @@ func AuthMiddleware() func(http.Handler) http.Handler {
 				writeError(w, errors.ErrInvalidToken(), http.StatusUnauthorized)
 				return
 			}
+			// clientIP := getClientIP(r)
 
 			// Set user context
 			ctx := context.WithValue(r.Context(), "userID", claims.UserID)
 			ctx = context.WithValue(ctx, "role", claims.Role)
 			ctx = context.WithValue(ctx, "device", claims.Device)
+			// ctx = context.WithValue(r.Context(), "client_ip", claims.clientIP)
 
 			// Continue with authenticated context
 			next.ServeHTTP(w, r.WithContext(ctx))

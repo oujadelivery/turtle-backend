@@ -49,7 +49,7 @@ directives:
   auth:
     skip_runtime: false
   rateLimit:
-    skip_runtime: false
+    skip_runtime: true
 
 # Federation (for future microservices)
 federation:

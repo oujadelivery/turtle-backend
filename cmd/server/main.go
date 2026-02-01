@@ -18,9 +18,12 @@ import (
 	"turtle/config"
 	"turtle/graph"
 	"turtle/graph/generated"
+	"turtle/internal/application/services"
 	"turtle/internal/application/usecases"
+	"turtle/internal/domain"
 	"turtle/internal/infrastructure/cache"
 	"turtle/internal/infrastructure/database"
+	"turtle/internal/infrastructure/dataloader"
 	infraPostgres "turtle/internal/infrastructure/persistence/postgres"
 	"turtle/middleware"
 )
@@ -44,7 +47,7 @@ func main() {
 	}
 	defer database.Close()
 
-	// 🆕 RUN MIGRATIONS (with environment-aware error handling)
+	// Run migrations
 	if err := database.MigrateDatabase(database.GetDB(), cfg.IsDevelopment()); err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
@@ -56,13 +59,22 @@ func main() {
 	}
 	defer cache.Close()
 
-	// Initialize repositories
+	// ============================================================================
+	// INITIALIZE REPOSITORIES (Data Layer)
+	// ============================================================================
 	userRepo := infraPostgres.NewUserRepository(database.GetDB())
 	addressRepo := infraPostgres.NewAddressRepository(database.GetDB())
 	otpRepo := infraPostgres.NewOTPRepository(database.GetDB())
 	refreshTokenRepo := infraPostgres.NewRefreshTokenRepository(database.GetDB())
 
-	// Initialize services
+	// ============================================================================
+	// INITIALIZE SERVICES (Business Logic Layer with DataLoader)
+	// ============================================================================
+	// Services wrap repositories and provide DataLoader optimization
+	userService := services.NewUserService(userRepo)
+	addressService := services.NewAddressService(addressRepo)
+	
+	// Authentication service (already exists, uses repositories directly)
 	authService := usecases.NewAuthenticationService(
 		userRepo,
 		otpRepo,
@@ -70,17 +82,18 @@ func main() {
 		&CacheAdapter{},
 	)
 
-	// Initialize resolver
+	// ============================================================================
+	// INITIALIZE RESOLVER (Presentation Layer)
+	// ============================================================================
+	// Resolver now uses services instead of repositories
 	resolver := graph.NewResolver(
-		userRepo,
-		addressRepo,
-		otpRepo,
-		refreshTokenRepo,
+		userService,
+		addressService,
 		authService,
 		&CacheAdapter{},
 	)
 
-	// Create GraphQL server with correct import
+	// Create GraphQL server
 	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{
 		Resolvers: resolver,
 	}))
@@ -100,7 +113,7 @@ func main() {
 	srv.AddTransport(transport.GET{})
 
 	// Setup HTTP routes
-	http.Handle("/graphql", createGraphQLHandler(srv, cfg))
+	http.Handle("/graphql", createGraphQLHandler(srv, cfg, userRepo, addressRepo))
 	http.Handle("/", playground.Handler("GraphQL Playground", "/graphql"))
 	http.HandleFunc("/health", healthCheckHandler)
 
@@ -118,6 +131,11 @@ func main() {
 		log.Printf("🚀 Server starting on http://localhost:%s", cfg.Server.Port)
 		log.Printf("🎮 GraphQL Playground: http://localhost:%s", cfg.Server.Port)
 		log.Printf("💚 Health check: http://localhost:%s/health", cfg.Server.Port)
+		
+		if cfg.IsDevelopment() {
+			log.Printf("📊 DataLoader enabled - Statistics will be logged per request")
+			log.Printf("🔧 Service Layer active - Optimized batching and caching")
+		}
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed to start: %v", err)
@@ -143,7 +161,7 @@ func main() {
 }
 
 // createGraphQLHandler creates GraphQL handler with all middleware
-func createGraphQLHandler(srv *handler.Server, cfg *config.Config) http.Handler {
+func createGraphQLHandler(srv *handler.Server, cfg *config.Config, userRepo domain.UserRepository, addressRepo domain.AddressRepository) http.Handler {
 	var h http.Handler = srv
 
 	// Apply middleware in reverse order (last applied = first executed)
@@ -157,6 +175,9 @@ func createGraphQLHandler(srv *handler.Server, cfg *config.Config) http.Handler 
 	// Request ID
 	h = middleware.RequestIDMiddleware()(h)
 
+	// DataLoader (CRITICAL: Must be early in chain for per-request lifecycle)
+	h = dataloader.DataLoaderMiddleware(userRepo, addressRepo)(h)
+
 	if cfg.IsProduction() {
 		// Rate limiting
 		cacheService := &CacheAdapter{}
@@ -165,7 +186,7 @@ func createGraphQLHandler(srv *handler.Server, cfg *config.Config) http.Handler 
 		// Operation-specific rate limiting
 		h = middleware.OperationRateLimiter(cacheService, middleware.DefaultOperationLimits())(h)
 	} else {
-		// ⭐ In development, log that rate limiting is disabled
+		// ⚠️ In development, log that rate limiting is disabled
 		log.Println("⚠️  Rate limiting DISABLED in development mode")
 	}
 
@@ -201,44 +222,52 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	
 	if !healthy {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 
-	fmt.Fprintf(w, `{"status":"%s","database":"%v","cache":"%v"}`, status, dbErr == nil, cacheErr == nil)
+	response := fmt.Sprintf(`{
+		"status": "%s",
+		"database": %t,
+		"redis": %t,
+		"timestamp": "%s"
+	}`, status, dbErr == nil, cacheErr == nil, time.Now().Format(time.RFC3339))
+
+	w.Write([]byte(response))
 }
 
-// CacheAdapter adapts cache service for GraphQL
+// CacheAdapter adapts our cache package to the CacheService interface
 type CacheAdapter struct{}
 
-func (c *CacheAdapter) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
+func (a *CacheAdapter) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	return cache.Set(ctx, key, value, expiration)
 }
 
-func (c *CacheAdapter) Get(ctx context.Context, key string) (string, error) {
+func (a *CacheAdapter) Get(ctx context.Context, key string) (string, error) {
 	return cache.Get(ctx, key)
 }
 
-func (c *CacheAdapter) Delete(ctx context.Context, keys ...string) error {
+func (a *CacheAdapter) Delete(ctx context.Context, keys ...string) error {
 	return cache.Delete(ctx, keys...)
 }
 
-func (c *CacheAdapter) CheckRateLimit(ctx context.Context, key string, limit int, window time.Duration) (bool, int, error) {
+func (a *CacheAdapter) CheckRateLimit(ctx context.Context, key string, limit int, window time.Duration) (bool, int, error) {
 	return cache.CheckRateLimit(ctx, key, limit, window)
 }
 
-func (r *CacheAdapter) AcquireLock(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+func (c *CacheAdapter) AcquireLock(ctx context.Context, key string, ttl time.Duration) (bool, error) {
 	return cache.AcquireLock(ctx, key, ttl)
 }
 
-func (r *CacheAdapter) ReleaseLock(ctx context.Context, key string) error {
+func (c *CacheAdapter) ReleaseLock(ctx context.Context, key string) error {
 	return cache.ReleaseLock(ctx, key)
 }
 
-func (r *CacheAdapter) BlacklistToken(ctx context.Context, token string, expiration time.Duration) error {
+func (c *CacheAdapter) BlacklistToken(ctx context.Context, token string, expiration time.Duration) error {
 	return cache.BlacklistToken(ctx, token, expiration)
 }
 
-func (r *CacheAdapter) IsTokenBlacklisted(ctx context.Context, token string) (bool, error) {
+func (c *CacheAdapter) IsTokenBlacklisted(ctx context.Context, token string) (bool, error) {
 	return cache.IsTokenBlacklisted(ctx, token)
 }

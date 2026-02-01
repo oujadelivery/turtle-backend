@@ -13,6 +13,7 @@ type UserRepository interface {
 
 	// FindByID finds a user by ID
 	FindByID(ctx context.Context, id string) (*aggregates.User, error)
+	FindByIDs(ctx context.Context, ids []string) ([]*aggregates.User, error)
 
 	// FindByEmail finds a user by email
 	FindByEmail(ctx context.Context, email string) (*aggregates.User, error)
@@ -68,9 +69,11 @@ type AddressRepository interface {
 
 	// FindByID finds an address by ID
 	FindByID(ctx context.Context, id string) (*aggregates.Address, error)
+	FindByIDs(ctx context.Context, ids []string) ([]*aggregates.Address, error)
 
 	// FindByUserID finds all addresses for a user
 	FindByUserID(ctx context.Context, userID string) ([]*aggregates.Address, error)
+	FindByUserIDs(ctx context.Context, userIDs []string) (map[string][]*aggregates.Address, error)
 
 	// FindDefaultByUserID finds user's default address
 	FindDefaultByUserID(ctx context.Context, userID string) (*aggregates.Address, error)

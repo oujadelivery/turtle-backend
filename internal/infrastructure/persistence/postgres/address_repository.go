@@ -375,7 +375,31 @@ func (r *AddressRepository) FindNearest(ctx context.Context, userID string, lat,
 // BULK OPERATIONS
 // ============================================================================
 
-// FindByIDs finds multiple addresses by their IDs
+func (r *AddressRepository) FindByUserIDs(ctx context.Context, userIDs []string) (map[string][]*aggregates.Address, error) {
+	var models []AddressModel
+
+	err := r.db.WithContext(ctx).
+		Where("user_id IN ? AND deleted_at IS NULL", userIDs).
+		Order("user_id, is_default DESC, last_used_at DESC NULLS LAST").
+		Find(&models).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to find addresses: %w", err)
+	}
+
+	// Group by user ID
+	results := make(map[string][]*aggregates.Address)
+	for _, model := range models {
+		address, err := AddressToDomain(&model)
+		if err != nil {
+			continue
+		}
+		results[model.UserID] = append(results[model.UserID], address)
+	}
+
+	return results, nil
+}
+
 func (r *AddressRepository) FindByIDs(ctx context.Context, ids []string) ([]*aggregates.Address, error) {
 	var models []AddressModel
 
@@ -384,7 +408,7 @@ func (r *AddressRepository) FindByIDs(ctx context.Context, ids []string) ([]*agg
 		Find(&models).Error
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to find addresses by IDs: %w", err)
+		return nil, fmt.Errorf("failed to find addresses: %w", err)
 	}
 
 	addresses := make([]*aggregates.Address, 0, len(models))

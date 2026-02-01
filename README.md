@@ -93,6 +93,57 @@ turtle-backend/
 
 ---
 
+┌─────────────────────────────────────────────────────────┐
+│                    GraphQL Resolvers                     │
+│              (Clean, simple method calls)                │
+│                                                           │
+│  user, err := r.Resolver.userService.GetUser(ctx, id)   │
+└─────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│                   Service Layer (NEW!)                   │
+│                                                           │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  UserService                                       │  │
+│  │  • GetUser() - DataLoader batching                │  │
+│  │  • SearchUsers() - Cache priming                  │  │
+│  │  • UpdateUserProfile() - Cache invalidation       │  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                           │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  AddressService                                    │  │
+│  │  • GetAddress() - DataLoader batching             │  │
+│  │  • GetUserAddresses() - N+1 prevention            │  │
+│  │  • UpdateAddress() - Cache management             │  │
+│  └──────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│                   DataLoader Layer                       │
+│            (Automatic batching & caching)                │
+│                                                           │
+│  • Batches multiple requests (16ms window)              │
+│  • Caches results per-request                           │
+│  • Deduplicates queries                                 │
+└─────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│                    Repositories                          │
+│              (Pure database operations)                  │
+│                                                           │
+│  • FindByID(s) - Batch queries                          │
+│  • Search - Complex queries                             │
+│  • Update - Save operations                             │
+└─────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│                    PostgreSQL                            │
+└─────────────────────────────────────────────────────────┘
+
 ## 🗺 Roadmap
 
 ### ✅ Phase 1: Foundation (COMPLETE - Week 1-2)

@@ -24,7 +24,7 @@ func (r *mutationResolver) Placeholder(ctx context.Context) (*bool, error) {
 // Returns true if the API is healthy and all dependencies are available
 func (r *queryResolver) Health(ctx context.Context) (bool, error) {
 	// Check database connection
-	if err := r.Resolver.userRepo.HealthCheck(ctx); err != nil {
+	if err := r.Resolver.userService.HealthCheck(ctx); err != nil {
 		return false, nil
 	}
 
@@ -67,7 +67,7 @@ func (r *subscriptionResolver) UserUpdated(ctx context.Context, userID string) (
 				return
 			case <-ticker.C:
 				// Fetch user and check if updated
-				user, err := r.Resolver.userRepo.FindByID(ctx, userID)
+				user, err := r.Resolver.userService.GetUser(ctx, userID)
 				if err != nil {
 					// Log error but don't close channel
 					fmt.Printf("Error fetching user in subscription: %v\n", err)
@@ -121,7 +121,7 @@ func (r *subscriptionResolver) CaptainLocationUpdated(ctx context.Context, capta
 				return
 			case <-ticker.C:
 				// Fetch captain and check location
-				captain, err := r.Resolver.userRepo.FindByID(ctx, captainID)
+				captain, err := r.Resolver.userService.GetUser(ctx, captainID)
 				if err != nil {
 					fmt.Printf("Error fetching captain in subscription: %v\n", err)
 					continue
@@ -195,7 +195,7 @@ func (r *subscriptionResolver) CaptainAvailabilityChanged(ctx context.Context, c
 				return
 			case <-ticker.C:
 				// Fetch captain and check availability
-				captain, err := r.Resolver.userRepo.FindByID(ctx, captainID)
+				captain, err := r.Resolver.userService.GetUser(ctx, captainID)
 				if err != nil {
 					fmt.Printf("Error fetching captain in subscription: %v\n", err)
 					continue

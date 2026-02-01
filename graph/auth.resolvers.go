@@ -38,7 +38,7 @@ func (r *mutationResolver) SocialLogin(ctx context.Context, input model.SocialLo
 	}
 
 	// Fetch full user details
-	user, err := r.Resolver.userRepo.FindByID(ctx, output.UserID)
+	user, err := r.Resolver.userService.GetUser(ctx, output.UserID)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -93,7 +93,7 @@ func (r *mutationResolver) VerifyOtp(ctx context.Context, input model.VerifyOTPI
 	}
 
 	// Fetch full user details
-	user, err := r.Resolver.userRepo.FindByID(ctx, output.UserID)
+	user, err := r.Resolver.userService.GetUser(ctx, output.UserID)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -155,7 +155,7 @@ func (r *mutationResolver) LogoutAll(ctx context.Context) (bool, error) {
 		return false, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	err := r.Resolver.refreshTokenRepo.RevokeAllForUser(ctx, userID)
+	err := r.Resolver.authService.RevokeAllSessions(ctx, userID)
 	if err != nil {
 		return false, handleError(ctx, err)
 	}
@@ -231,7 +231,7 @@ func (r *mutationResolver) BecomeCaptain(ctx context.Context, input model.Become
 	}
 
 	// Fetch updated user
-	user, err := r.Resolver.userRepo.FindByID(ctx, userID)
+	user, err := r.Resolver.userService.GetUser(ctx, userID)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -246,7 +246,7 @@ func (r *queryResolver) Me(ctx context.Context) (*model.User, error) {
 		return nil, nil
 	}
 
-	user, err := r.Resolver.userRepo.FindByID(ctx, userID)
+	user, err := r.Resolver.userService.GetUser(ctx, userID)
 	if err != nil {
 		if err == domain.ErrNotFound {
 			return nil, nil
@@ -264,7 +264,7 @@ func (r *queryResolver) MySessions(ctx context.Context) ([]*model.Session, error
 		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	tokens, err := r.Resolver.refreshTokenRepo.FindActiveByUserID(ctx, userID)
+	tokens, err := r.Resolver.authService.GetActiveSessions(ctx, userID)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}

@@ -23,7 +23,7 @@ func (r *mutationResolver) UpdateProfile(ctx context.Context, input model.Update
 	}
 
 	// Fetch user
-	user, err := r.Resolver.userRepo.FindByID(ctx, userID)
+	user, err := r.Resolver.userService.GetUser(ctx, userID)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -47,13 +47,8 @@ func (r *mutationResolver) UpdateProfile(ctx context.Context, input model.Update
 		lastName = user.LastName()
 	}
 
-	err = user.UpdateProfile(firstName, lastName, profilePic)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
 	// Save changes
-	err = r.Resolver.userRepo.Update(ctx, user)
+	user, err = r.Resolver.userService.UpdateProfile(ctx, userID, firstName, lastName, profilePic)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -68,29 +63,13 @@ func (r *mutationResolver) UpdateVehicle(ctx context.Context, input model.Update
 		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	// Fetch user
-	user, err := r.Resolver.userRepo.FindByID(ctx, userID)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	// Check if user is captain
-	if !user.IsCaptain() {
-		return nil, pkgErrors.ErrForbidden("Only captains can update vehicle information")
-	}
-
-	// Update vehicle
-	err = user.UpdateVehicleInfo(
+	user, err := r.Resolver.userService.UpdateVehicle(
+		ctx,
+		userID,
 		aggregates.VehicleType(input.VehicleType),
 		input.VehicleNumber,
 		input.VehicleModel,
 	)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	// Save changes
-	err = r.Resolver.userRepo.Update(ctx, user)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -105,31 +84,12 @@ func (r *mutationResolver) SubmitKyc(ctx context.Context, input model.SubmitKYCI
 		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	// Fetch user
-	user, err := r.Resolver.userRepo.FindByID(ctx, userID)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	if !user.IsCaptain() {
-		return nil, pkgErrors.ErrForbidden("Only captains can submit KYC")
-	}
-
-	// TODO: Upload files and get URLs
 	documents := map[string]string{
 		"LICENSE":       "url_to_license",
 		"VEHICLE_RC":    "url_to_rc",
 		"PROFILE_PHOTO": "url_to_photo",
 	}
-
-	// Submit KYC
-	err = user.SubmitKYCDocuments(documents)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	// Save changes
-	err = r.Resolver.userRepo.Update(ctx, user)
+	user, err := r.Resolver.userService.SubmitKYC(ctx, userID, documents)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -145,7 +105,7 @@ func (r *mutationResolver) GoOnline(ctx context.Context, input model.GoOnlineInp
 	}
 
 	// Fetch user
-	user, err := r.Resolver.userRepo.FindByID(ctx, userID)
+	_, err := r.Resolver.userService.GetUser(ctx, userID)
 	if err != nil {
 		return false, handleError(ctx, err)
 	}
@@ -156,14 +116,8 @@ func (r *mutationResolver) GoOnline(ctx context.Context, input model.GoOnlineInp
 		return false, handleError(ctx, err)
 	}
 
-	// Go online
-	err = user.GoOnline(location)
-	if err != nil {
-		return false, handleError(ctx, err)
-	}
-
 	// Save changes
-	err = r.Resolver.userRepo.Update(ctx, user)
+	err = r.Resolver.userService.GoOnline(ctx, userID, location)
 	if err != nil {
 		return false, handleError(ctx, err)
 	}
@@ -179,19 +133,13 @@ func (r *mutationResolver) GoOffline(ctx context.Context) (bool, error) {
 	}
 
 	// Fetch user
-	user, err := r.Resolver.userRepo.FindByID(ctx, userID)
+	_, err := r.Resolver.userService.GetUser(ctx, userID)
 	if err != nil {
 		return false, handleError(ctx, err)
 	}
 
 	// Go offline
-	err = user.GoOffline()
-	if err != nil {
-		return false, handleError(ctx, err)
-	}
-
-	// Save changes
-	err = r.Resolver.userRepo.Update(ctx, user)
+	err = r.Resolver.userService.GoOffline(ctx, userID)
 	if err != nil {
 		return false, handleError(ctx, err)
 	}
@@ -213,7 +161,7 @@ func (r *mutationResolver) UpdateLocation(ctx context.Context, input model.Updat
 	}
 
 	// Update location directly in repository (lightweight operation)
-	err = r.Resolver.userRepo.UpdateCaptainLocation(ctx, userID, location.Latitude(), location.Longitude())
+	err = r.Resolver.userService.UpdateLocation(ctx, userID, location.Latitude(), location.Longitude())
 	if err != nil {
 		return false, handleError(ctx, err)
 	}
@@ -228,25 +176,12 @@ func (r *mutationResolver) ApproveKyc(ctx context.Context, captainID string, rea
 		return nil, pkgErrors.ErrForbidden("Only admins can approve KYC")
 	}
 
-	// Fetch captain
-	user, err := r.Resolver.userRepo.FindByID(ctx, captainID)
+	updatedUser, err := r.Resolver.userService.ApproveKYC(ctx, captainID)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
 
-	// Approve KYC
-	err = user.ApproveKyc()
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	// Save changes
-	err = r.Resolver.userRepo.Update(ctx, user)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	return userToGraphQL(user), nil
+	return userToGraphQL(updatedUser), nil
 }
 
 // RejectKyc rejects captain KYC (admin only)
@@ -255,25 +190,12 @@ func (r *mutationResolver) RejectKyc(ctx context.Context, captainID string, reas
 		return nil, pkgErrors.ErrForbidden("Only admins can reject KYC")
 	}
 
-	// Fetch captain
-	user, err := r.Resolver.userRepo.FindByID(ctx, captainID)
+	updatedUser, err := r.Resolver.userService.RejectKYC(ctx, captainID, reason)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
 
-	// Reject KYC
-	err = user.RejectKyc(reason)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	// Save changes
-	err = r.Resolver.userRepo.Update(ctx, user)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	return userToGraphQL(user), nil
+	return userToGraphQL(updatedUser), nil
 }
 
 // BlockUser blocks a user account (admin only)
@@ -282,25 +204,12 @@ func (r *mutationResolver) BlockUser(ctx context.Context, userID string, reason 
 		return nil, pkgErrors.ErrForbidden("Only admins can block users")
 	}
 
-	// Fetch user
-	user, err := r.Resolver.userRepo.FindByID(ctx, userID)
+	updatedUser, err := r.Resolver.userService.BlockUser(ctx, userID, reason)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
 
-	// Block user
-	err = user.Block(reason)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	// Save changes
-	err = r.Resolver.userRepo.Update(ctx, user)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	return userToGraphQL(user), nil
+	return userToGraphQL(updatedUser), nil
 }
 
 // UnblockUser unblocks a user account (admin only)
@@ -309,30 +218,17 @@ func (r *mutationResolver) UnblockUser(ctx context.Context, userID string) (*mod
 		return nil, pkgErrors.ErrForbidden("Only admins can unblock users")
 	}
 
-	// Fetch user
-	user, err := r.Resolver.userRepo.FindByID(ctx, userID)
+	updatedUser, err := r.Resolver.userService.UnblockUser(ctx, userID)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
 
-	// Unblock user
-	err = user.Unblock()
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	// Save changes
-	err = r.Resolver.userRepo.Update(ctx, user)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	return userToGraphQL(user), nil
+	return userToGraphQL(updatedUser), nil
 }
 
 // User returns user by ID
 func (r *queryResolver) User(ctx context.Context, id string) (*model.User, error) {
-	user, err := r.Resolver.userRepo.FindByID(ctx, id)
+	user, err := r.Resolver.userService.GetUser(ctx, id)
 	if err != nil {
 		if err == domain.ErrNotFound {
 			return nil, nil
@@ -365,7 +261,7 @@ func (r *queryResolver) SearchUsers(ctx context.Context, input model.UserSearchI
 		offset = *input.Offset
 	}
 
-	users, total, err := r.Resolver.userRepo.Search(ctx, query, role, limit, offset)
+	users, total, err := r.Resolver.userService.SearchUsers(ctx, query, role, limit, offset)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -405,7 +301,7 @@ func (r *queryResolver) PendingKYCCaptains(ctx context.Context, limit *int, offs
 		o = *offset
 	}
 
-	captains, err := r.Resolver.userRepo.FindCaptainsByStatus(ctx, "PENDING")
+	captains, err := r.Resolver.userService.FindCaptainsByStatus(ctx, "PENDING")
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -448,7 +344,7 @@ func (r *queryResolver) NearbyCaptains(ctx context.Context, latitude float64, lo
 		radius = *radiusKm
 	}
 
-	captains, err := r.Resolver.userRepo.FindCaptainsNearby(ctx, latitude, longitude, radius)
+	captains, err := r.Resolver.userService.FindCaptainsNearby(ctx, latitude, longitude, radius)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -467,7 +363,7 @@ func (r *queryResolver) UserStats(ctx context.Context) (*model.UserStats, error)
 		return nil, pkgErrors.ErrForbidden("Only admins can view statistics")
 	}
 
-	stats, err := r.Resolver.userRepo.GetUserStats(ctx)
+	stats, err := r.Resolver.userService.GetUserStats(ctx)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}

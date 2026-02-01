@@ -59,12 +59,10 @@ func (r *mutationResolver) CreateAddress(ctx context.Context, input model.Create
 	// Set as default if requested
 	if boolValue(input.SetAsDefault) {
 		address.SetAsDefault()
-		// Unset other defaults
-		r.Resolver.addressRepo.UnsetDefault(ctx, userID)
 	}
 
 	// Save address
-	err = r.Resolver.addressRepo.Create(ctx, address)
+	err = r.Resolver.addressService.CreateAddress(ctx, userID, address)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -80,7 +78,7 @@ func (r *mutationResolver) UpdateAddress(ctx context.Context, input model.Update
 	}
 
 	// Fetch address
-	address, err := r.Resolver.addressRepo.FindByID(ctx, input.ID)
+	address, err := r.Resolver.addressService.GetAddress(ctx, input.ID)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -145,12 +143,9 @@ func (r *mutationResolver) UpdateAddress(ctx context.Context, input model.Update
 	}
 
 	// Save changes
-	err = r.Resolver.addressRepo.Update(ctx, address)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
+	updatedAddress, err := r.Resolver.addressService.UpdateAddress(ctx, userID, address)
 
-	return addressToGraphQL(address), nil
+	return addressToGraphQL(updatedAddress), nil
 }
 
 // DeleteAddress soft deletes an address
@@ -160,18 +155,8 @@ func (r *mutationResolver) DeleteAddress(ctx context.Context, id string) (bool, 
 		return false, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	// Fetch address to verify ownership
-	address, err := r.Resolver.addressRepo.FindByID(ctx, id)
-	if err != nil {
-		return false, handleError(ctx, err)
-	}
-
-	if address.UserID() != userID {
-		return false, pkgErrors.ErrForbidden("You don't have permission to delete this address")
-	}
-
 	// Delete address
-	err = r.Resolver.addressRepo.Delete(ctx, id)
+	err := r.Resolver.addressService.DeleteAddress(ctx, userID, id)
 	if err != nil {
 		return false, handleError(ctx, err)
 	}
@@ -186,30 +171,13 @@ func (r *mutationResolver) SetDefaultAddress(ctx context.Context, id string) (*m
 		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	// Fetch address
-	address, err := r.Resolver.addressRepo.FindByID(ctx, id)
+	// Use service - it handles unset, update, and cache management
+	updatedAddress, err := r.Resolver.addressService.SetDefaultAddress(ctx, userID, id)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
 
-	if address.UserID() != userID {
-		return nil, pkgErrors.ErrForbidden("You don't have permission to modify this address")
-	}
-
-	// Unset all defaults first
-	err = r.Resolver.addressRepo.UnsetDefault(ctx, userID)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	// Set as default
-	address.SetAsDefault()
-	err = r.Resolver.addressRepo.Update(ctx, address)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	return addressToGraphQL(address), nil
+	return addressToGraphQL(updatedAddress), nil
 }
 
 // VerifyAddress marks an address location as verified
@@ -219,32 +187,17 @@ func (r *mutationResolver) VerifyAddress(ctx context.Context, id string) (*model
 		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	// Fetch address
-	address, err := r.Resolver.addressRepo.FindByID(ctx, id)
+	updatedAddress, err := r.Resolver.addressService.VerifyAddress(ctx, userID, id)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
 
-	// Verify ownership
-	if address.UserID() != userID {
-		return nil, pkgErrors.ErrForbidden("You don't have permission to verify this address")
-	}
-
-	// Mark as verified
-	address.MarkAsVerified()
-
-	// Save changes
-	err = r.Resolver.addressRepo.Update(ctx, address)
-	if err != nil {
-		return nil, handleError(ctx, err)
-	}
-
-	return addressToGraphQL(address), nil
+	return addressToGraphQL(updatedAddress), nil
 }
 
 // Address returns address by ID
 func (r *queryResolver) Address(ctx context.Context, id string) (*model.Address, error) {
-	address, err := r.Resolver.addressRepo.FindByID(ctx, id)
+	address, err := r.Resolver.addressService.GetAddress(ctx, id)
 	if err != nil {
 		if err == domain.ErrNotFound {
 			return nil, nil
@@ -262,7 +215,7 @@ func (r *queryResolver) MyAddresses(ctx context.Context) ([]*model.Address, erro
 		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	addresses, err := r.Resolver.addressRepo.FindByUserID(ctx, userID)
+	addresses, err := r.Resolver.addressService.GetUserAddresses(ctx, userID)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -283,7 +236,7 @@ func (r *queryResolver) MyDefaultAddress(ctx context.Context) (*model.Address, e
 	}
 
 	// Get all addresses and find the default one
-	addresses, err := r.Resolver.addressRepo.FindByUserID(ctx, userID)
+	addresses, err := r.Resolver.addressService.GetUserAddresses(ctx, userID)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -311,7 +264,7 @@ func (r *queryResolver) SuggestedAddresses(ctx context.Context, limit *int) ([]*
 		l = *limit
 	}
 
-	addresses, err := r.Resolver.addressRepo.FindSuggestedAddresses(ctx, userID, l)
+	addresses, err := r.Resolver.addressService.GetSuggestedAddresses(ctx, userID, l)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -321,8 +274,8 @@ func (r *queryResolver) SuggestedAddresses(ctx context.Context, limit *int) ([]*
 	for i, addr := range addresses {
 		result[i] = &model.AddressSuggestion{
 			Address: addressToGraphQL(addr),
-			Score:   float64(addr.UsageCount()) / 10.0, // Simple scoring based on usage
-			Reason:  determineAddressSuggestionReason(addr),
+			Score:   r.Resolver.addressService.CalculateConfidence(addr), // Simple scoring based on usage
+			Reason:  r.Resolver.addressService.GenerateSuggestionReason(addr),
 		}
 	}
 
@@ -341,7 +294,7 @@ func (r *queryResolver) NearestAddresses(ctx context.Context, latitude float64, 
 		l = *limit
 	}
 
-	addresses, err := r.Resolver.addressRepo.FindNearest(ctx, userID, latitude, longitude, l)
+	addresses, err := r.Resolver.addressService.FindNearestAddresses(ctx, userID, latitude, longitude, l)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -377,7 +330,7 @@ func (r *queryResolver) SearchAddresses(ctx context.Context, input model.Address
 		o = *input.Offset
 	}
 
-	addresses, total, err := r.Resolver.addressRepo.SearchAddresses(ctx, userID, query, l, o)
+	addresses, total, err := r.Resolver.addressService.SearchAddresses(ctx, userID, query, l, o)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}
@@ -408,7 +361,7 @@ func (r *queryResolver) AddressStats(ctx context.Context) (*model.AddressStats, 
 		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	stats, err := r.Resolver.addressRepo.GetAddressStats(ctx, userID)
+	stats, err := r.Resolver.addressService.GetAddressStats(ctx, userID)
 	if err != nil {
 		return nil, handleError(ctx, err)
 	}

@@ -48,7 +48,6 @@ type ResolverRoot interface {
 type DirectiveRoot struct {
 	Auth          func(ctx context.Context, obj any, next graphql.Resolver, role *string) (res any, err error)
 	HasPermission func(ctx context.Context, obj any, next graphql.Resolver, permissions []string) (res any, err error)
-	RateLimit     func(ctx context.Context, obj any, next graphql.Resolver, limit int, window int) (res any, err error)
 }
 
 type ComplexityRoot struct {
@@ -3495,22 +3494,6 @@ func (ec *executionContext) dir_hasPermission_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["permissions"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) dir_rateLimit_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "limit", ec.unmarshalNInt2int)
-	if err != nil {
-		return nil, err
-	}
-	args["limit"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "window", ec.unmarshalNInt2int)
-	if err != nil {
-		return nil, err
-	}
-	args["window"] = arg1
 	return args, nil
 }
 
@@ -7884,30 +7867,7 @@ func (ec *executionContext) _Mutation_requestOTP(ctx context.Context, field grap
 			fc := graphql.GetFieldContext(ctx)
 			return ec.resolvers.Mutation().RequestOtp(ctx, fc.Args["input"].(model.RequestOTPInput))
 		},
-		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
-			directive0 := next
-
-			directive1 := func(ctx context.Context) (any, error) {
-				limit, err := ec.unmarshalNInt2int(ctx, 3)
-				if err != nil {
-					var zeroVal *model.OTPResponse
-					return zeroVal, err
-				}
-				window, err := ec.unmarshalNInt2int(ctx, 3600)
-				if err != nil {
-					var zeroVal *model.OTPResponse
-					return zeroVal, err
-				}
-				if ec.directives.RateLimit == nil {
-					var zeroVal *model.OTPResponse
-					return zeroVal, errors.New("directive rateLimit is not implemented")
-				}
-				return ec.directives.RateLimit(ctx, nil, directive0, limit, window)
-			}
-
-			next = directive1
-			return next
-		},
+		nil,
 		ec.marshalNOTPResponse2ᚖturtleᚋgraphᚋmodelᚐOTPResponse,
 		true,
 		true,
@@ -7960,30 +7920,7 @@ func (ec *executionContext) _Mutation_verifyOTP(ctx context.Context, field graph
 			fc := graphql.GetFieldContext(ctx)
 			return ec.resolvers.Mutation().VerifyOtp(ctx, fc.Args["input"].(model.VerifyOTPInput))
 		},
-		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
-			directive0 := next
-
-			directive1 := func(ctx context.Context) (any, error) {
-				limit, err := ec.unmarshalNInt2int(ctx, 5)
-				if err != nil {
-					var zeroVal *model.AuthResponse
-					return zeroVal, err
-				}
-				window, err := ec.unmarshalNInt2int(ctx, 900)
-				if err != nil {
-					var zeroVal *model.AuthResponse
-					return zeroVal, err
-				}
-				if ec.directives.RateLimit == nil {
-					var zeroVal *model.AuthResponse
-					return zeroVal, errors.New("directive rateLimit is not implemented")
-				}
-				return ec.directives.RateLimit(ctx, nil, directive0, limit, window)
-			}
-
-			next = directive1
-			return next
-		},
+		nil,
 		ec.marshalNAuthResponse2ᚖturtleᚋgraphᚋmodelᚐAuthResponse,
 		true,
 		true,

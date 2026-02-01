@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"turtle/internal/application/services"
 	"turtle/internal/application/usecases"
-	"turtle/internal/domain"
 )
 
 // This file will not be regenerated automatically.
@@ -13,16 +13,17 @@ import (
 
 // Resolver is the root resolver that holds all dependencies
 type Resolver struct {
-	// Repositories
-	userRepo         domain.UserRepository
-	addressRepo      domain.AddressRepository
-	otpRepo          domain.OTPRepository
-	refreshTokenRepo domain.RefreshTokenRepository
+	// ============================================================================
+	// SERVICES (NEW ARCHITECTURE)
+	// Services wrap repositories with DataLoader optimization
+	// ============================================================================
+	userService    *services.UserService
+	addressService *services.AddressService
+	authService    *usecases.AuthenticationService
 
-	// Services
-	authService *usecases.AuthenticationService
-
-	// Cache for rate limiting
+	// ============================================================================
+	// INFRASTRUCTURE
+	// ============================================================================
 	cache CacheService
 }
 
@@ -35,20 +36,22 @@ type CacheService interface {
 }
 
 // NewResolver creates a new root resolver with all dependencies
+//
+// MIGRATION NOTE:
+// Old signature: NewResolver(userRepo, addressRepo, otpRepo, refreshTokenRepo, authService, cache)
+// New signature: NewResolver(userService, addressService, authService, cache)
+//
+// Repositories are now encapsulated in services!
 func NewResolver(
-	userRepo domain.UserRepository,
-	addressRepo domain.AddressRepository,
-	otpRepo domain.OTPRepository,
-	refreshTokenRepo domain.RefreshTokenRepository,
+	userService *services.UserService,
+	addressService *services.AddressService,
 	authService *usecases.AuthenticationService,
 	cache CacheService,
 ) *Resolver {
 	return &Resolver{
-		userRepo:         userRepo,
-		addressRepo:      addressRepo,
-		otpRepo:          otpRepo,
-		refreshTokenRepo: refreshTokenRepo,
-		authService:      authService,
-		cache:            cache,
+		userService:    userService,
+		addressService: addressService,
+		authService:    authService,
+		cache:          cache,
 	}
 }
