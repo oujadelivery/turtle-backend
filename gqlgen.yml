@@ -1,33 +1,66 @@
+# GraphQL schema location
 schema:
   - graph/schema/*.graphqls
 
+# Where the generated server code will be saved
 exec:
   filename: graph/generated/generated.go
   package: generated
 
+# Where the generated models will be saved
 model:
   filename: graph/model/models_gen.go
   package: model
 
+# Resolver configuration
 resolver:
   layout: follow-schema
   dir: graph
   package: graph
   filename_template: "{name}.resolvers.go"
+  omit_template_comment: false
 
-autobind:
-  - "turtle/models"
-
+# Don't generate pointers for slice elements
 omit_slice_element_pointers: false
 
-# Map custom scalars
+# Custom scalar mappings
 models:
+  # Standard scalars
   ID:
     model:
       - github.com/99designs/gqlgen/graphql.ID
+  
+  Int:
+    model:
+      - github.com/99designs/gqlgen/graphql.Int
+  
+  # Custom Time scalar
   Time:
     model:
       - github.com/99designs/gqlgen/graphql.Time
+  
+  # JSON scalar for flexible data
   JSON:
     model:
       - github.com/99designs/gqlgen/graphql.Map
+
+# Directives configuration
+directives:
+  auth:
+    skip_runtime: false
+  rateLimit:
+    skip_runtime: true
+
+# Federation (for future microservices)
+federation:
+  filename: graph/generated/federation.go
+  package: generated
+  version: 2
+
+# Optional: Complexity limits
+# complexity:
+#   node_count_limit: 50
+
+# Optional: Generate type-safe errors
+# omit_gqlgen_version_comment: false
+# omit_panic_handler: false

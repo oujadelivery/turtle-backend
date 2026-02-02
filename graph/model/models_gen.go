@@ -8,378 +8,615 @@ import (
 	"io"
 	"strconv"
 	"time"
-	"turtle/models"
+
+	"github.com/99designs/gqlgen/graphql"
 )
 
-type Response interface {
-	IsResponse()
-	GetSuccess() bool
-	GetMessage() *string
+// Input for adding phone to customer account
+type AddPhoneInput struct {
+	// Phone number to add
+	Phone string `json:"phone"`
 }
 
-type AuthPayload struct {
-	AccessToken  string `json:"accessToken"`
+// Address represents a saved delivery address
+// Includes ML-ready usage analytics for smart suggestions
+type Address struct {
+	// Unique address ID
+	ID string `json:"id"`
+	// User who owns this address
+	UserID string `json:"userID"`
+	// Address label (HOME, WORK, OTHER)
+	Label AddressLabel `json:"label"`
+	// Primary address line
+	AddressLine1 string `json:"addressLine1"`
+	// Secondary address line
+	AddressLine2 *string `json:"addressLine2,omitempty"`
+	// Landmark for easier location
+	Landmark *string `json:"landmark,omitempty"`
+	// City
+	City string `json:"city"`
+	// State/Province
+	State string `json:"state"`
+	// Country
+	Country string `json:"country"`
+	// Postal/ZIP code
+	PostalCode *string `json:"postalCode,omitempty"`
+	// GPS coordinates
+	Location *Location `json:"location"`
+	// Contact person name at this address
+	ContactName *string `json:"contactName,omitempty"`
+	// Contact phone at this address
+	ContactPhone *string `json:"contactPhone,omitempty"`
+	// Is this the default address?
+	IsDefault bool `json:"isDefault"`
+	// Is this address active?
+	IsActive bool `json:"isActive"`
+	// Has GPS location been verified?
+	IsVerified bool `json:"isVerified"`
+	// Total times this address has been used
+	UsageCount int `json:"usageCount"`
+	// Last time this address was used
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+	// Usage score (0-100) for ranking
+	UsageScore float64 `json:"usageScore"`
+	// Morning usage count (6 AM - 12 PM)
+	MorningUsageCount int `json:"morningUsageCount"`
+	// Afternoon usage count (12 PM - 6 PM)
+	AfternoonUsageCount int `json:"afternoonUsageCount"`
+	// Evening usage count (6 PM - 12 AM)
+	EveningUsageCount int `json:"eveningUsageCount"`
+	// Night usage count (12 AM - 6 AM)
+	NightUsageCount int `json:"nightUsageCount"`
+	// Weekday usage count
+	WeekdayUsageCount int `json:"weekdayUsageCount"`
+	// Weekend usage count
+	WeekendUsageCount int `json:"weekendUsageCount"`
+	// Is this likely a home address? (based on usage patterns)
+	IsLikelyHome bool `json:"isLikelyHome"`
+	// Is this likely a work address? (based on usage patterns)
+	IsLikelyWork bool `json:"isLikelyWork"`
+	// Preferred time slot for this address
+	PreferredTimeSlot TimeOfDay `json:"preferredTimeSlot"`
+	// Full formatted address
+	FullAddress string `json:"fullAddress"`
+	// Short address for display
+	ShortAddress string `json:"shortAddress"`
+	// Address creation time
+	CreatedAt time.Time `json:"createdAt"`
+	// Last update time
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// AddressConnection for paginated address lists
+type AddressConnection struct {
+	Edges      []*AddressEdge `json:"edges"`
+	PageInfo   *PageInfo      `json:"pageInfo"`
+	TotalCount int            `json:"totalCount"`
+}
+
+// AddressEdge wraps address with cursor
+type AddressEdge struct {
+	Cursor string   `json:"cursor"`
+	Node   *Address `json:"node"`
+}
+
+// Input for searching addresses
+type AddressSearchInput struct {
+	// Search query (city, state, postal code)
+	Query *string `json:"query,omitempty"`
+	// Results per page
+	Limit *int `json:"limit,omitempty"`
+	// Page offset
+	Offset *int `json:"offset,omitempty"`
+}
+
+// AddressStats provides address usage statistics
+type AddressStats struct {
+	// Total addresses
+	TotalAddresses int `json:"totalAddresses"`
+	// Default address
+	DefaultAddress *Address `json:"defaultAddress,omitempty"`
+	// Most used address
+	MostUsedAddress *Address `json:"mostUsedAddress,omitempty"`
+	// Recently used addresses
+	RecentAddresses []*Address `json:"recentAddresses"`
+}
+
+// AddressSuggestion represents a smart address suggestion
+type AddressSuggestion struct {
+	// The suggested address
+	Address *Address `json:"address"`
+	// Suggestion score (0-100)
+	Score float64 `json:"score"`
+	// Reason for suggestion
+	Reason string `json:"reason"`
+}
+
+// AdminProfile contains admin-specific information
+type AdminProfile struct {
+	// Admin permissions
+	Permissions []string `json:"permissions"`
+	// Department
+	Department string `json:"department"`
+	// Employee ID
+	EmployeeID *string `json:"employeeID,omitempty"`
+}
+
+// AuthResponse returned after successful authentication
+type AuthResponse struct {
+	// Authentication tokens
+	Tokens *AuthToken `json:"tokens"`
+	// Authenticated user
+	User *User `json:"user"`
+	// Whether this is a new user
+	IsNewUser bool `json:"isNewUser"`
+	// Additional flags
+	NeedsPhone *bool `json:"needsPhone,omitempty"`
+	NeedsKyc   *bool `json:"needsKYC,omitempty"`
+}
+
+// AuthToken contains access and refresh tokens
+type AuthToken struct {
+	// Short-lived access token (15 minutes)
+	AccessToken string `json:"accessToken"`
+	// Long-lived refresh token (60 days)
 	RefreshToken string `json:"refreshToken"`
-	UserID       int    `json:"userId"`
-	Role         string `json:"role"`
+	// Access token expiration time
+	ExpiresAt time.Time `json:"expiresAt"`
+	// Token type (always "Bearer")
+	TokenType string `json:"tokenType"`
 }
 
-type ChatMessageConnection struct {
-	Edges    []*models.ChatMessage `json:"edges"`
-	PageInfo *PaginationInfo       `json:"pageInfo"`
+// Input for becoming a captain
+type BecomeCaptainInput struct {
+	// Phone number (if not already present)
+	Phone *string `json:"phone,omitempty"`
 }
 
-type CouponValidation struct {
-	IsValid        bool     `json:"isValid"`
-	Message        *string  `json:"message,omitempty"`
-	DiscountAmount *float64 `json:"discountAmount,omitempty"`
-	FinalAmount    *float64 `json:"finalAmount,omitempty"`
-}
-
-type CreateAddressInput struct {
-	Label        *AddressLabel `json:"label,omitempty"`
-	AddressLine1 string        `json:"addressLine1"`
-	AddressLine2 *string       `json:"addressLine2,omitempty"`
-	Landmark     *string       `json:"landmark,omitempty"`
-	City         string        `json:"city"`
-	State        string        `json:"state"`
-	Country      *string       `json:"country,omitempty"`
-	PostalCode   string        `json:"postalCode"`
-	Latitude     float64       `json:"latitude"`
-	Longitude    float64       `json:"longitude"`
-	ContactName  *string       `json:"contactName,omitempty"`
-	ContactPhone *string       `json:"contactPhone,omitempty"`
-	IsDefault    *bool         `json:"isDefault,omitempty"`
-}
-
-type CreateCouponInput struct {
-	Code             string     `json:"code"`
-	Description      *string    `json:"description,omitempty"`
-	Type             CouponType `json:"type"`
-	Value            float64    `json:"value"`
-	MinOrderValue    *float64   `json:"minOrderValue,omitempty"`
-	MaxDiscountValue *float64   `json:"maxDiscountValue,omitempty"`
-	UsageLimit       *int       `json:"usageLimit,omitempty"`
-	PerUserLimit     *int       `json:"perUserLimit,omitempty"`
-	ValidFrom        time.Time  `json:"validFrom"`
-	ValidUntil       time.Time  `json:"validUntil"`
-	IsPublic         *bool      `json:"isPublic,omitempty"`
-	FirstOrderOnly   *bool      `json:"firstOrderOnly,omitempty"`
-}
-
-type CreateOrderInput struct {
-	PickupAddressID      int           `json:"pickupAddressId"`
-	PickupName           string        `json:"pickupName"`
-	PickupPhone          string        `json:"pickupPhone"`
-	PickupInstructions   *string       `json:"pickupInstructions,omitempty"`
-	DeliveryAddressID    int           `json:"deliveryAddressId"`
-	DeliveryName         string        `json:"deliveryName"`
-	DeliveryPhone        string        `json:"deliveryPhone"`
-	DeliveryInstructions *string       `json:"deliveryInstructions,omitempty"`
-	ParcelType           ParcelType    `json:"parcelType"`
-	ParcelWeight         *float64      `json:"parcelWeight,omitempty"`
-	ParcelDescription    *string       `json:"parcelDescription,omitempty"`
-	ParcelValue          *float64      `json:"parcelValue,omitempty"`
-	ParcelImages         []string      `json:"parcelImages,omitempty"`
-	PaymentMethod        PaymentMethod `json:"paymentMethod"`
-	CouponCode           *string       `json:"couponCode,omitempty"`
-	IsPriority           *bool         `json:"isPriority,omitempty"`
-	IsInsured            *bool         `json:"isInsured,omitempty"`
-}
-
-type CreateTicketInput struct {
-	OrderID     *int           `json:"orderId,omitempty"`
-	Subject     string         `json:"subject"`
-	Description string         `json:"description"`
-	Priority    *string        `json:"priority,omitempty"`
-	Category    TicketCategory `json:"category"`
-	Attachments []string       `json:"attachments,omitempty"`
-}
-
-type Distance struct {
-	DistanceKm      float64 `json:"distanceKm"`
-	DistanceMeters  float64 `json:"distanceMeters"`
-	DurationMinutes int     `json:"durationMinutes"`
-	DurationSeconds int     `json:"durationSeconds"`
-}
-
-type EarningsSummary struct {
-	TotalEarnings   float64                   `json:"totalEarnings"`
-	PlatformFee     float64                   `json:"platformFee"`
-	NetEarnings     float64                   `json:"netEarnings"`
-	TipsReceived    float64                   `json:"tipsReceived"`
-	BonusEarnings   float64                   `json:"bonusEarnings"`
-	TotalOrders     int                       `json:"totalOrders"`
-	CompletedOrders int                       `json:"completedOrders"`
-	CancelledOrders int                       `json:"cancelledOrders"`
-	TotalDistance   float64                   `json:"totalDistance"`
-	OnlineHours     float64                   `json:"onlineHours"`
-	AverageRating   float64                   `json:"averageRating"`
-	DailyBreakdown  []*models.CaptainEarnings `json:"dailyBreakdown"`
-}
-
-type ErrorResponse struct {
-	Success bool    `json:"success"`
-	Message *string `json:"message,omitempty"`
-	Code    *string `json:"code,omitempty"`
-}
-
-func (ErrorResponse) IsResponse()              {}
-func (this ErrorResponse) GetSuccess() bool    { return this.Success }
-func (this ErrorResponse) GetMessage() *string { return this.Message }
-
-type EstimatePriceInput struct {
-	PickupLat    float64    `json:"pickupLat"`
-	PickupLng    float64    `json:"pickupLng"`
-	DeliveryLat  float64    `json:"deliveryLat"`
-	DeliveryLng  float64    `json:"deliveryLng"`
-	ParcelType   ParcelType `json:"parcelType"`
-	ParcelWeight *float64   `json:"parcelWeight,omitempty"`
-	IsPriority   *bool      `json:"isPriority,omitempty"`
-	CouponCode   *string    `json:"couponCode,omitempty"`
-}
-
-type GeocodedAddress struct {
-	FormattedAddress string  `json:"formattedAddress"`
-	AddressLine1     *string `json:"addressLine1,omitempty"`
-	AddressLine2     *string `json:"addressLine2,omitempty"`
-	Landmark         *string `json:"landmark,omitempty"`
-	City             *string `json:"city,omitempty"`
-	State            *string `json:"state,omitempty"`
-	Country          *string `json:"country,omitempty"`
-	PostalCode       *string `json:"postalCode,omitempty"`
-	Latitude         float64 `json:"latitude"`
-	Longitude        float64 `json:"longitude"`
-}
-
-type KYCDocumentsInput struct {
-	LicensePhotoURL string  `json:"licensePhotoUrl"`
-	VehicleRCUrl    string  `json:"vehicleRCUrl"`
-	InsuranceURL    string  `json:"insuranceUrl"`
-	ProfilePhotoURL string  `json:"profilePhotoUrl"`
-	AadhaarURL      *string `json:"aadhaarUrl,omitempty"`
-	PanURL          *string `json:"panUrl,omitempty"`
-}
-
-type Location struct {
-	Latitude  float64    `json:"latitude"`
-	Longitude float64    `json:"longitude"`
-	Address   *string    `json:"address,omitempty"`
-	City      *string    `json:"city,omitempty"`
-	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
-}
-
-type LocationUpdate struct {
-	OrderID   int       `json:"orderId"`
-	CaptainID int       `json:"captainId"`
-	Latitude  float64   `json:"latitude"`
-	Longitude float64   `json:"longitude"`
-	Speed     *float64  `json:"speed,omitempty"`
-	Bearing   *float64  `json:"bearing,omitempty"`
+// CaptainAvailability represents captain's online/offline status
+type CaptainAvailability struct {
+	// Captain ID
+	CaptainID string `json:"captainID"`
+	// Is captain available?
+	IsAvailable bool `json:"isAvailable"`
+	// Current location if available
+	Location *Location `json:"location,omitempty"`
+	// Timestamp of change
 	Timestamp time.Time `json:"timestamp"`
 }
 
+// CaptainProfile contains captain-specific information
+type CaptainProfile struct {
+	// Vehicle type
+	VehicleType *VehicleType `json:"vehicleType,omitempty"`
+	// Vehicle registration number
+	VehicleNumber *string `json:"vehicleNumber,omitempty"`
+	// Vehicle model
+	VehicleModel *string `json:"vehicleModel,omitempty"`
+	// Driving license number
+	LicenseNumber *string `json:"licenseNumber,omitempty"`
+	// License expiry date
+	LicenseExpiry *time.Time `json:"licenseExpiry,omitempty"`
+	// KYC verification status
+	KycStatus KYCStatus `json:"kycStatus"`
+	// KYC documents
+	KycDocuments []*KYCDocument `json:"kycDocuments,omitempty"`
+	// Whether captain is currently available for orders
+	IsAvailable bool `json:"isAvailable"`
+	// Current location (if available)
+	CurrentLocation *Location `json:"currentLocation,omitempty"`
+	// Last location update time
+	LocationUpdatedAt *time.Time `json:"locationUpdatedAt,omitempty"`
+	// Order completion rate (0-100)
+	CompletionRate float64 `json:"completionRate"`
+	// Cancellation rate (0-100)
+	CancellationRate float64 `json:"cancellationRate"`
+	// On-time delivery rate (0-100)
+	OnTimeRate float64 `json:"onTimeRate"`
+	// Onboarding completion time
+	OnboardedAt *time.Time `json:"onboardedAt,omitempty"`
+	// KYC verification time
+	VerifiedAt *time.Time `json:"verifiedAt,omitempty"`
+}
+
+// ContactInfo for non-user contacts (pickup/delivery persons)
+type ContactInfo struct {
+	Name           string `json:"name"`
+	Phone          string `json:"phone"`
+	FormattedPhone string `json:"formattedPhone"`
+}
+
+// Input for contact information
+type ContactInfoInput struct {
+	Name  string `json:"name"`
+	Phone string `json:"phone"`
+}
+
+// Input for creating a new address
+type CreateAddressInput struct {
+	// Address label
+	Label *AddressLabel `json:"label,omitempty"`
+	// Primary address line
+	AddressLine1 string `json:"addressLine1"`
+	// Secondary address line
+	AddressLine2 *string `json:"addressLine2,omitempty"`
+	// Landmark
+	Landmark *string `json:"landmark,omitempty"`
+	// City
+	City string `json:"city"`
+	// State/Province
+	State string `json:"state"`
+	// Country
+	Country *string `json:"country,omitempty"`
+	// Postal/ZIP code
+	PostalCode *string `json:"postalCode,omitempty"`
+	// GPS location
+	Location *LocationInput `json:"location"`
+	// Contact person name
+	ContactName *string `json:"contactName,omitempty"`
+	// Contact phone
+	ContactPhone *string `json:"contactPhone,omitempty"`
+	// Set as default address
+	SetAsDefault *bool `json:"setAsDefault,omitempty"`
+}
+
+// Error represents a structured error response
+// Provides client-friendly error messages and codes
+type Error struct {
+	// Error code for programmatic handling
+	Code string `json:"code"`
+	// Human-readable error message
+	Message string `json:"message"`
+	// Optional field that caused the error
+	Field *string `json:"field,omitempty"`
+	// Additional error details
+	Details map[string]any `json:"details,omitempty"`
+}
+
+// File represents an uploaded file
+type File struct {
+	// Unique file ID
+	ID string `json:"id"`
+	// Original filename
+	Filename string `json:"filename"`
+	// File MIME type
+	Mimetype string `json:"mimetype"`
+	// File size in bytes
+	Size int `json:"size"`
+	// URL to access the file
+	URL string `json:"url"`
+	// Upload timestamp
+	UploadedAt time.Time `json:"uploadedAt"`
+}
+
+// Input for going online as captain
+type GoOnlineInput struct {
+	// Current location
+	Location *LocationInput `json:"location"`
+}
+
+// KYC Document
+type KYCDocument struct {
+	// Document type
+	Type string `json:"type"`
+	// Document URL
+	URL string `json:"url"`
+	// Upload timestamp
+	UploadedAt time.Time `json:"uploadedAt"`
+}
+
+// Location represents geographic coordinates
+type Location struct {
+	// Latitude (-90 to 90)
+	Latitude float64 `json:"latitude"`
+	// Longitude (-180 to 180)
+	Longitude float64 `json:"longitude"`
+	// Formatted address if available
+	Address *string `json:"address,omitempty"`
+}
+
+// Input for location data
+type LocationInput struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+}
+
+// Money represents a monetary value with currency
+// Always stored in smallest unit (paise for INR, cents for USD)
+type Money struct {
+	// Amount in smallest unit (e.g., paise, cents)
+	Amount int `json:"amount"`
+	// ISO 4217 currency code (e.g., INR, USD)
+	Currency string `json:"currency"`
+	// Amount in major unit for display (e.g., rupees, dollars)
+	DisplayAmount float64 `json:"displayAmount"`
+	// Formatted string for display (e.g., "₹50.99")
+	Formatted string `json:"formatted"`
+}
+
+// Input for monetary values
+type MoneyInput struct {
+	// Amount in major unit (e.g., rupees, dollars)
+	Amount float64 `json:"amount"`
+	// ISO 4217 currency code
+	Currency string `json:"currency"`
+}
+
+// Root Mutation type - all write operations
 type Mutation struct {
 }
 
-type NotificationConnection struct {
-	Edges    []*models.Notification `json:"edges"`
-	PageInfo *PaginationInfo        `json:"pageInfo"`
+// OTPResponse after requesting OTP
+type OTPResponse struct {
+	// Whether OTP was sent successfully
+	Success bool `json:"success"`
+	// Message for the user
+	Message string `json:"message"`
+	// Target (phone/email) where OTP was sent
+	Target string `json:"target"`
+	// OTP expiration time
+	ExpiresAt time.Time `json:"expiresAt"`
+	// Remaining attempts before rate limit
+	RemainingAttempts *int `json:"remainingAttempts,omitempty"`
 }
 
-type OrderConnection struct {
-	Edges    []*models.Order `json:"edges"`
-	PageInfo *PaginationInfo `json:"pageInfo"`
+// PageInfo contains pagination metadata
+type PageInfo struct {
+	HasNextPage     bool    `json:"hasNextPage"`
+	HasPreviousPage bool    `json:"hasPreviousPage"`
+	StartCursor     *string `json:"startCursor,omitempty"`
+	EndCursor       *string `json:"endCursor,omitempty"`
+	Total           int     `json:"total"`
 }
 
-type PaginationInfo struct {
-	Total      int  `json:"total"`
-	Page       int  `json:"page"`
-	PageSize   int  `json:"pageSize"`
-	TotalPages int  `json:"totalPages"`
-	HasNext    bool `json:"hasNext"`
-	HasPrev    bool `json:"hasPrev"`
-}
-
-type PaginationInput struct {
-	Page     *int `json:"page,omitempty"`
-	PageSize *int `json:"pageSize,omitempty"`
-}
-
-type PriceEstimate struct {
-	BasePrice         float64 `json:"basePrice"`
-	DistancePrice     float64 `json:"distancePrice"`
-	SurgeMultiplier   float64 `json:"surgeMultiplier"`
-	SurgePrice        float64 `json:"surgePrice"`
-	DiscountAmount    float64 `json:"discountAmount"`
-	TaxAmount         float64 `json:"taxAmount"`
-	EstimatedTotal    float64 `json:"estimatedTotal"`
-	EstimatedDistance float64 `json:"estimatedDistance"`
-	EstimatedDuration int     `json:"estimatedDuration"`
-	Currency          string  `json:"currency"`
-}
-
+// Root Query type - all read operations
 type Query struct {
 }
 
-type RateUserInput struct {
-	OrderID               int      `json:"orderId"`
-	RatedUserID           int      `json:"ratedUserId"`
-	Rating                float64  `json:"rating"`
-	BehaviorRating        *float64 `json:"behaviorRating,omitempty"`
-	TimelinessRating      *float64 `json:"timelinessRating,omitempty"`
-	CommunicationRating   *float64 `json:"communicationRating,omitempty"`
-	ParcelConditionRating *float64 `json:"parcelConditionRating,omitempty"`
-	Comment               *string  `json:"comment,omitempty"`
-	Tags                  []string `json:"tags,omitempty"`
+// Input for refreshing access token
+type RefreshTokenInput struct {
+	// Refresh token
+	RefreshToken string `json:"refreshToken"`
 }
 
-type RatingConnection struct {
-	Edges    []*models.Rating `json:"edges"`
-	PageInfo *PaginationInfo  `json:"pageInfo"`
+// Input for requesting OTP
+type RequestOTPInput struct {
+	// Phone number (international format)
+	Phone string `json:"phone"`
+	// Purpose of the OTP
+	Purpose OTPPurpose `json:"purpose"`
 }
 
-type ScheduleOrderInput struct {
-	OrderInput        *CreateOrderInput `json:"orderInput"`
-	ScheduledPickupAt time.Time         `json:"scheduledPickupAt"`
+// Session represents an active user session
+type Session struct {
+	// Session ID
+	ID string `json:"id"`
+	// Device type
+	Device DeviceType `json:"device"`
+	// Device information
+	DeviceInfo map[string]any `json:"deviceInfo,omitempty"`
+	// Last activity timestamp
+	LastUsedAt time.Time `json:"lastUsedAt"`
+	// Session creation time
+	CreatedAt time.Time `json:"createdAt"`
+	// Session expiration time
+	ExpiresAt time.Time `json:"expiresAt"`
+	// Whether session is currently active
+	IsActive bool `json:"isActive"`
 }
 
-type SendMessageInput struct {
-	RoomID      int          `json:"roomId"`
-	ReceiverID  int          `json:"receiverId"`
-	Message     string       `json:"message"`
-	MessageType *MessageType `json:"messageType,omitempty"`
-	MediaURL    *string      `json:"mediaURL,omitempty"`
-	Latitude    *float64     `json:"latitude,omitempty"`
-	Longitude   *float64     `json:"longitude,omitempty"`
+// Input for social login (Google/Apple)
+type SocialLoginInput struct {
+	// Provider (GOOGLE or APPLE)
+	Provider AuthProvider `json:"provider"`
+	// User ID from the provider
+	ProviderID string `json:"providerID"`
+	// Email address from provider
+	Email string `json:"email"`
+	// First name
+	FirstName string `json:"firstName"`
+	// Last name
+	LastName string `json:"lastName"`
+	// Profile picture URL
+	ProfilePic *string `json:"profilePic,omitempty"`
+	// Device type
+	DeviceType DeviceType `json:"deviceType"`
+	// Additional device information
+	DeviceInfo map[string]any `json:"deviceInfo,omitempty"`
 }
 
-type StatusHistoryItem struct {
-	Status    OrderStatus `json:"status"`
-	Timestamp time.Time   `json:"timestamp"`
-	Note      *string     `json:"note,omitempty"`
+// Input for submitting KYC documents
+type SubmitKYCInput struct {
+	// Driving license image
+	License graphql.Upload `json:"license"`
+	// Vehicle RC image
+	VehicleRc graphql.Upload `json:"vehicleRC"`
+	// Profile photo
+	ProfilePhoto graphql.Upload `json:"profilePhoto"`
+	// Additional documents
+	AdditionalDocs []*graphql.Upload `json:"additionalDocs,omitempty"`
 }
 
+// Root Subscription type - real-time updates
 type Subscription struct {
 }
 
-type SuccessResponse struct {
-	Success bool    `json:"success"`
-	Message *string `json:"message,omitempty"`
-}
-
-func (SuccessResponse) IsResponse()              {}
-func (this SuccessResponse) GetSuccess() bool    { return this.Success }
-func (this SuccessResponse) GetMessage() *string { return this.Message }
-
-type TicketConnection struct {
-	Edges    []*models.SupportTicket `json:"edges"`
-	PageInfo *PaginationInfo         `json:"pageInfo"`
-}
-
-type TicketMessage struct {
-	ID           int          `json:"id"`
-	TicketID     int          `json:"ticketId"`
-	UserID       int          `json:"userId"`
-	Message      string       `json:"message"`
-	Attachments  []string     `json:"attachments,omitempty"`
-	IsStaffReply bool         `json:"isStaffReply"`
-	User         *models.User `json:"user"`
-	CreatedAt    time.Time    `json:"createdAt"`
-}
-
-type TrackLocationInput struct {
-	Latitude     float64  `json:"latitude"`
-	Longitude    float64  `json:"longitude"`
-	Accuracy     *float64 `json:"accuracy,omitempty"`
-	Altitude     *float64 `json:"altitude,omitempty"`
-	Speed        *float64 `json:"speed,omitempty"`
-	Bearing      *float64 `json:"bearing,omitempty"`
-	BatteryLevel *int     `json:"batteryLevel,omitempty"`
-	NetworkType  *string  `json:"networkType,omitempty"`
-}
-
-type TransactionConnection struct {
-	Edges    []*models.Transaction `json:"edges"`
-	PageInfo *PaginationInfo       `json:"pageInfo"`
-}
-
-type TypingIndicator struct {
-	RoomID   int  `json:"roomId"`
-	UserID   int  `json:"userId"`
-	IsTyping bool `json:"isTyping"`
-}
-
+// Input for updating an address
 type UpdateAddressInput struct {
-	Label        *AddressLabel `json:"label,omitempty"`
-	AddressLine1 *string       `json:"addressLine1,omitempty"`
-	AddressLine2 *string       `json:"addressLine2,omitempty"`
-	Landmark     *string       `json:"landmark,omitempty"`
-	City         *string       `json:"city,omitempty"`
-	State        *string       `json:"state,omitempty"`
-	PostalCode   *string       `json:"postalCode,omitempty"`
-	Latitude     *float64      `json:"latitude,omitempty"`
-	Longitude    *float64      `json:"longitude,omitempty"`
-	ContactName  *string       `json:"contactName,omitempty"`
-	ContactPhone *string       `json:"contactPhone,omitempty"`
-	IsActive     *bool         `json:"isActive,omitempty"`
+	// Address ID to update
+	ID string `json:"id"`
+	// Address label
+	Label *AddressLabel `json:"label,omitempty"`
+	// Primary address line
+	AddressLine1 *string `json:"addressLine1,omitempty"`
+	// Secondary address line
+	AddressLine2 *string `json:"addressLine2,omitempty"`
+	// Landmark
+	Landmark *string `json:"landmark,omitempty"`
+	// City
+	City *string `json:"city,omitempty"`
+	// State/Province
+	State *string `json:"state,omitempty"`
+	// Postal/ZIP code
+	PostalCode *string `json:"postalCode,omitempty"`
+	// GPS location
+	Location *LocationInput `json:"location,omitempty"`
+	// Contact person name
+	ContactName *string `json:"contactName,omitempty"`
+	// Contact phone
+	ContactPhone *string `json:"contactPhone,omitempty"`
 }
 
-type UpdateCaptainProfileInput struct {
-	VehicleType   *VehicleType `json:"vehicleType,omitempty"`
-	VehicleNumber *string      `json:"vehicleNumber,omitempty"`
-	VehicleModel  *string      `json:"vehicleModel,omitempty"`
-	LicenseNumber *string      `json:"licenseNumber,omitempty"`
-	LicenseExpiry *time.Time   `json:"licenseExpiry,omitempty"`
-}
-
-type UpdateCouponInput struct {
-	Description      *string    `json:"description,omitempty"`
-	Value            *float64   `json:"value,omitempty"`
-	MinOrderValue    *float64   `json:"minOrderValue,omitempty"`
-	MaxDiscountValue *float64   `json:"maxDiscountValue,omitempty"`
-	UsageLimit       *int       `json:"usageLimit,omitempty"`
-	ValidFrom        *time.Time `json:"validFrom,omitempty"`
-	ValidUntil       *time.Time `json:"validUntil,omitempty"`
-	IsActive         *bool      `json:"isActive,omitempty"`
-}
-
+// Input for updating captain location
 type UpdateLocationInput struct {
-	Latitude  float64         `json:"latitude"`
-	Longitude float64         `json:"longitude"`
-	Accuracy  *float64        `json:"accuracy,omitempty"`
-	Source    *LocationSource `json:"source,omitempty"`
+	// New location
+	Location *LocationInput `json:"location"`
 }
 
+// Input for updating user profile
 type UpdateProfileInput struct {
+	// First name
 	FirstName *string `json:"firstName,omitempty"`
-	LastName  *string `json:"lastName,omitempty"`
-	Email     *string `json:"email,omitempty"`
-	Phone     *string `json:"phone,omitempty"`
+	// Last name
+	LastName *string `json:"lastName,omitempty"`
+	// Profile picture
+	ProfilePic *graphql.Upload `json:"profilePic,omitempty"`
 }
 
-type UpdateRatingInput struct {
-	Rating                *float64 `json:"rating,omitempty"`
-	BehaviorRating        *float64 `json:"behaviorRating,omitempty"`
-	TimelinessRating      *float64 `json:"timelinessRating,omitempty"`
-	CommunicationRating   *float64 `json:"communicationRating,omitempty"`
-	ParcelConditionRating *float64 `json:"parcelConditionRating,omitempty"`
-	Comment               *string  `json:"comment,omitempty"`
-	Tags                  []string `json:"tags,omitempty"`
+// Input for updating vehicle information
+type UpdateVehicleInput struct {
+	// Vehicle type
+	VehicleType VehicleType `json:"vehicleType"`
+	// Vehicle registration number
+	VehicleNumber string `json:"vehicleNumber"`
+	// Vehicle model
+	VehicleModel string `json:"vehicleModel"`
 }
 
+// User represents a registered user (Customer, Captain, or Admin)
+// Supports dual-role: one user can be both Customer and Captain
+type User struct {
+	// Unique user ID
+	ID string `json:"id"`
+	// First name
+	FirstName string `json:"firstName"`
+	// Last name
+	LastName string `json:"lastName"`
+	// Full name (computed)
+	FullName string `json:"fullName"`
+	// Profile picture URL
+	ProfilePic *string `json:"profilePic,omitempty"`
+	// Email address
+	Email *string `json:"email,omitempty"`
+	// Email verification status
+	EmailVerified bool `json:"emailVerified"`
+	// Phone number
+	Phone *string `json:"phone,omitempty"`
+	// Phone verification status
+	PhoneVerified bool `json:"phoneVerified"`
+	// Primary role (initial role)
+	PrimaryRole UserRole `json:"primaryRole"`
+	// All roles user has
+	Roles []UserRole `json:"roles"`
+	// Account status
+	Status UserStatus `json:"status"`
+	// Wallet balance
+	WalletBalance *Money `json:"walletBalance"`
+	// Average rating (1-5)
+	Rating *float64 `json:"rating,omitempty"`
+	// Total number of ratings
+	TotalRatings int `json:"totalRatings"`
+	// Total orders placed (as customer)
+	TotalOrders int `json:"totalOrders"`
+	// Total deliveries completed (as captain)
+	TotalDeliveries int `json:"totalDeliveries"`
+	// Captain profile (only if user has CAPTAIN role)
+	CaptainProfile *CaptainProfile `json:"captainProfile,omitempty"`
+	// Admin profile (only if user has ADMIN role)
+	AdminProfile *AdminProfile `json:"adminProfile,omitempty"`
+	// Account creation time
+	CreatedAt time.Time `json:"createdAt"`
+	// Last update time
+	UpdatedAt time.Time `json:"updatedAt"`
+	// Last activity time
+	LastActiveAt *time.Time `json:"lastActiveAt,omitempty"`
+}
+
+// UserConnection for paginated user lists
 type UserConnection struct {
-	Edges    []*models.User  `json:"edges"`
-	PageInfo *PaginationInfo `json:"pageInfo"`
+	Edges      []*UserEdge `json:"edges"`
+	PageInfo   *PageInfo   `json:"pageInfo"`
+	TotalCount int         `json:"totalCount"`
 }
 
-type Wallet struct {
-	Balance       float64   `json:"balance"`
-	Currency      string    `json:"currency"`
-	LastUpdated   time.Time `json:"lastUpdated"`
-	PendingAmount float64   `json:"pendingAmount"`
+// UserEdge wraps user with cursor
+type UserEdge struct {
+	Cursor string `json:"cursor"`
+	Node   *User  `json:"node"`
 }
 
+// Input for user search
+type UserSearchInput struct {
+	// Search query (name, email, phone)
+	Query *string `json:"query,omitempty"`
+	// Filter by role
+	Role *UserRole `json:"role,omitempty"`
+	// Filter by status
+	Status *UserStatus `json:"status,omitempty"`
+	// Results per page
+	Limit *int `json:"limit,omitempty"`
+	// Page offset
+	Offset *int `json:"offset,omitempty"`
+}
+
+// UserStats provides aggregated user statistics
+type UserStats struct {
+	// Total users
+	TotalUsers int `json:"totalUsers"`
+	// Total customers
+	TotalCustomers int `json:"totalCustomers"`
+	// Total captains
+	TotalCaptains int `json:"totalCaptains"`
+	// Total admins
+	TotalAdmins int `json:"totalAdmins"`
+	// Active users (last 7 days)
+	ActiveUsers int `json:"activeUsers"`
+	// Verified captains
+	VerifiedCaptains int `json:"verifiedCaptains"`
+	// Online captains
+	OnlineCaptains int `json:"onlineCaptains"`
+}
+
+// ValidationError for input validation failures
+type ValidationError struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+	Code    string `json:"code"`
+}
+
+// Input for verifying OTP and logging in
+type VerifyOTPInput struct {
+	// Phone number
+	Phone string `json:"phone"`
+	// 6-digit OTP code
+	Code string `json:"code"`
+	// Purpose of verification
+	Purpose OTPPurpose `json:"purpose"`
+	// Device type
+	DeviceType DeviceType `json:"deviceType"`
+	// Additional device information
+	DeviceInfo map[string]any `json:"deviceInfo,omitempty"`
+}
+
+// Input for verifying added phone
+type VerifyPhoneInput struct {
+	// Phone number
+	Phone string `json:"phone"`
+	// Verification code
+	Code string `json:"code"`
+}
+
+// Address labels
 type AddressLabel string
 
 const (
@@ -437,50 +674,53 @@ func (e AddressLabel) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-type CaptainStatus string
+// Social login providers
+type AuthProvider string
 
 const (
-	CaptainStatusPending  CaptainStatus = "PENDING"
-	CaptainStatusVerified CaptainStatus = "VERIFIED"
-	CaptainStatusRejected CaptainStatus = "REJECTED"
+	AuthProviderGoogle AuthProvider = "GOOGLE"
+	AuthProviderApple  AuthProvider = "APPLE"
+	AuthProviderPhone  AuthProvider = "PHONE"
+	AuthProviderEmail  AuthProvider = "EMAIL"
 )
 
-var AllCaptainStatus = []CaptainStatus{
-	CaptainStatusPending,
-	CaptainStatusVerified,
-	CaptainStatusRejected,
+var AllAuthProvider = []AuthProvider{
+	AuthProviderGoogle,
+	AuthProviderApple,
+	AuthProviderPhone,
+	AuthProviderEmail,
 }
 
-func (e CaptainStatus) IsValid() bool {
+func (e AuthProvider) IsValid() bool {
 	switch e {
-	case CaptainStatusPending, CaptainStatusVerified, CaptainStatusRejected:
+	case AuthProviderGoogle, AuthProviderApple, AuthProviderPhone, AuthProviderEmail:
 		return true
 	}
 	return false
 }
 
-func (e CaptainStatus) String() string {
+func (e AuthProvider) String() string {
 	return string(e)
 }
 
-func (e *CaptainStatus) UnmarshalGQL(v any) error {
+func (e *AuthProvider) UnmarshalGQL(v any) error {
 	str, ok := v.(string)
 	if !ok {
 		return fmt.Errorf("enums must be strings")
 	}
 
-	*e = CaptainStatus(str)
+	*e = AuthProvider(str)
 	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid CaptainStatus", str)
+		return fmt.Errorf("%s is not a valid AuthProvider", str)
 	}
 	return nil
 }
 
-func (e CaptainStatus) MarshalGQL(w io.Writer) {
+func (e AuthProvider) MarshalGQL(w io.Writer) {
 	fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
-func (e *CaptainStatus) UnmarshalJSON(b []byte) error {
+func (e *AuthProvider) UnmarshalJSON(b []byte) error {
 	s, err := strconv.Unquote(string(b))
 	if err != nil {
 		return err
@@ -488,143 +728,30 @@ func (e *CaptainStatus) UnmarshalJSON(b []byte) error {
 	return e.UnmarshalGQL(s)
 }
 
-func (e CaptainStatus) MarshalJSON() ([]byte, error) {
+func (e AuthProvider) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
 }
 
-type CouponType string
-
-const (
-	CouponTypePercentage   CouponType = "PERCENTAGE"
-	CouponTypeFixedAmount  CouponType = "FIXED_AMOUNT"
-	CouponTypeFreeDelivery CouponType = "FREE_DELIVERY"
-)
-
-var AllCouponType = []CouponType{
-	CouponTypePercentage,
-	CouponTypeFixedAmount,
-	CouponTypeFreeDelivery,
-}
-
-func (e CouponType) IsValid() bool {
-	switch e {
-	case CouponTypePercentage, CouponTypeFixedAmount, CouponTypeFreeDelivery:
-		return true
-	}
-	return false
-}
-
-func (e CouponType) String() string {
-	return string(e)
-}
-
-func (e *CouponType) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = CouponType(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid CouponType", str)
-	}
-	return nil
-}
-
-func (e CouponType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *CouponType) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e CouponType) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
-type DevicePlatform string
-
-const (
-	DevicePlatformIos     DevicePlatform = "IOS"
-	DevicePlatformAndroid DevicePlatform = "ANDROID"
-	DevicePlatformWeb     DevicePlatform = "WEB"
-)
-
-var AllDevicePlatform = []DevicePlatform{
-	DevicePlatformIos,
-	DevicePlatformAndroid,
-	DevicePlatformWeb,
-}
-
-func (e DevicePlatform) IsValid() bool {
-	switch e {
-	case DevicePlatformIos, DevicePlatformAndroid, DevicePlatformWeb:
-		return true
-	}
-	return false
-}
-
-func (e DevicePlatform) String() string {
-	return string(e)
-}
-
-func (e *DevicePlatform) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = DevicePlatform(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid DevicePlatform", str)
-	}
-	return nil
-}
-
-func (e DevicePlatform) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *DevicePlatform) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e DevicePlatform) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
+// Device type for authentication
 type DeviceType string
 
 const (
-	DeviceTypeMobile  DeviceType = "MOBILE"
+	DeviceTypeIos     DeviceType = "IOS"
+	DeviceTypeAndroid DeviceType = "ANDROID"
 	DeviceTypeWeb     DeviceType = "WEB"
-	DeviceTypeDesktop DeviceType = "DESKTOP"
 )
 
 var AllDeviceType = []DeviceType{
-	DeviceTypeMobile,
+	DeviceTypeIos,
+	DeviceTypeAndroid,
 	DeviceTypeWeb,
-	DeviceTypeDesktop,
 }
 
 func (e DeviceType) IsValid() bool {
 	switch e {
-	case DeviceTypeMobile, DeviceTypeWeb, DeviceTypeDesktop:
+	case DeviceTypeIos, DeviceTypeAndroid, DeviceTypeWeb:
 		return true
 	}
 	return false
@@ -665,52 +792,51 @@ func (e DeviceType) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-type LocationSource string
+// KYC verification status
+type KYCStatus string
 
 const (
-	LocationSourceGps     LocationSource = "GPS"
-	LocationSourceManual  LocationSource = "MANUAL"
-	LocationSourceAddress LocationSource = "ADDRESS"
-	LocationSourceNetwork LocationSource = "NETWORK"
+	KYCStatusPending  KYCStatus = "PENDING"
+	KYCStatusVerified KYCStatus = "VERIFIED"
+	KYCStatusRejected KYCStatus = "REJECTED"
 )
 
-var AllLocationSource = []LocationSource{
-	LocationSourceGps,
-	LocationSourceManual,
-	LocationSourceAddress,
-	LocationSourceNetwork,
+var AllKYCStatus = []KYCStatus{
+	KYCStatusPending,
+	KYCStatusVerified,
+	KYCStatusRejected,
 }
 
-func (e LocationSource) IsValid() bool {
+func (e KYCStatus) IsValid() bool {
 	switch e {
-	case LocationSourceGps, LocationSourceManual, LocationSourceAddress, LocationSourceNetwork:
+	case KYCStatusPending, KYCStatusVerified, KYCStatusRejected:
 		return true
 	}
 	return false
 }
 
-func (e LocationSource) String() string {
+func (e KYCStatus) String() string {
 	return string(e)
 }
 
-func (e *LocationSource) UnmarshalGQL(v any) error {
+func (e *KYCStatus) UnmarshalGQL(v any) error {
 	str, ok := v.(string)
 	if !ok {
 		return fmt.Errorf("enums must be strings")
 	}
 
-	*e = LocationSource(str)
+	*e = KYCStatus(str)
 	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid LocationSource", str)
+		return fmt.Errorf("%s is not a valid KYCStatus", str)
 	}
 	return nil
 }
 
-func (e LocationSource) MarshalGQL(w io.Writer) {
+func (e KYCStatus) MarshalGQL(w io.Writer) {
 	fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
-func (e *LocationSource) UnmarshalJSON(b []byte) error {
+func (e *KYCStatus) UnmarshalJSON(b []byte) error {
 	s, err := strconv.Unquote(string(b))
 	if err != nil {
 		return err
@@ -718,58 +844,61 @@ func (e *LocationSource) UnmarshalJSON(b []byte) error {
 	return e.UnmarshalGQL(s)
 }
 
-func (e LocationSource) MarshalJSON() ([]byte, error) {
+func (e KYCStatus) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
 }
 
-type MessageType string
+// OTP purpose
+type OTPPurpose string
 
 const (
-	MessageTypeText     MessageType = "TEXT"
-	MessageTypeImage    MessageType = "IMAGE"
-	MessageTypeLocation MessageType = "LOCATION"
-	MessageTypeAudio    MessageType = "AUDIO"
+	OTPPurposeLogin         OTPPurpose = "LOGIN"
+	OTPPurposeVerification  OTPPurpose = "VERIFICATION"
+	OTPPurposePasswordReset OTPPurpose = "PASSWORD_RESET"
+	OTPPurposeOrderPickup   OTPPurpose = "ORDER_PICKUP"
+	OTPPurposeOrderDelivery OTPPurpose = "ORDER_DELIVERY"
 )
 
-var AllMessageType = []MessageType{
-	MessageTypeText,
-	MessageTypeImage,
-	MessageTypeLocation,
-	MessageTypeAudio,
+var AllOTPPurpose = []OTPPurpose{
+	OTPPurposeLogin,
+	OTPPurposeVerification,
+	OTPPurposePasswordReset,
+	OTPPurposeOrderPickup,
+	OTPPurposeOrderDelivery,
 }
 
-func (e MessageType) IsValid() bool {
+func (e OTPPurpose) IsValid() bool {
 	switch e {
-	case MessageTypeText, MessageTypeImage, MessageTypeLocation, MessageTypeAudio:
+	case OTPPurposeLogin, OTPPurposeVerification, OTPPurposePasswordReset, OTPPurposeOrderPickup, OTPPurposeOrderDelivery:
 		return true
 	}
 	return false
 }
 
-func (e MessageType) String() string {
+func (e OTPPurpose) String() string {
 	return string(e)
 }
 
-func (e *MessageType) UnmarshalGQL(v any) error {
+func (e *OTPPurpose) UnmarshalGQL(v any) error {
 	str, ok := v.(string)
 	if !ok {
 		return fmt.Errorf("enums must be strings")
 	}
 
-	*e = MessageType(str)
+	*e = OTPPurpose(str)
 	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid MessageType", str)
+		return fmt.Errorf("%s is not a valid OTPPurpose", str)
 	}
 	return nil
 }
 
-func (e MessageType) MarshalGQL(w io.Writer) {
+func (e OTPPurpose) MarshalGQL(w io.Writer) {
 	fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
-func (e *MessageType) UnmarshalJSON(b []byte) error {
+func (e *OTPPurpose) UnmarshalJSON(b []byte) error {
 	s, err := strconv.Unquote(string(b))
 	if err != nil {
 		return err
@@ -777,62 +906,55 @@ func (e *MessageType) UnmarshalJSON(b []byte) error {
 	return e.UnmarshalGQL(s)
 }
 
-func (e MessageType) MarshalJSON() ([]byte, error) {
+func (e OTPPurpose) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
 }
 
-type NotificationType string
+// Sort order for lists
+type SortOrder string
 
 const (
-	NotificationTypeOrderUpdate NotificationType = "ORDER_UPDATE"
-	NotificationTypePromotion   NotificationType = "PROMOTION"
-	NotificationTypePayment     NotificationType = "PAYMENT"
-	NotificationTypeSystem      NotificationType = "SYSTEM"
-	NotificationTypeRating      NotificationType = "RATING"
-	NotificationTypeSupport     NotificationType = "SUPPORT"
+	SortOrderAsc  SortOrder = "ASC"
+	SortOrderDesc SortOrder = "DESC"
 )
 
-var AllNotificationType = []NotificationType{
-	NotificationTypeOrderUpdate,
-	NotificationTypePromotion,
-	NotificationTypePayment,
-	NotificationTypeSystem,
-	NotificationTypeRating,
-	NotificationTypeSupport,
+var AllSortOrder = []SortOrder{
+	SortOrderAsc,
+	SortOrderDesc,
 }
 
-func (e NotificationType) IsValid() bool {
+func (e SortOrder) IsValid() bool {
 	switch e {
-	case NotificationTypeOrderUpdate, NotificationTypePromotion, NotificationTypePayment, NotificationTypeSystem, NotificationTypeRating, NotificationTypeSupport:
+	case SortOrderAsc, SortOrderDesc:
 		return true
 	}
 	return false
 }
 
-func (e NotificationType) String() string {
+func (e SortOrder) String() string {
 	return string(e)
 }
 
-func (e *NotificationType) UnmarshalGQL(v any) error {
+func (e *SortOrder) UnmarshalGQL(v any) error {
 	str, ok := v.(string)
 	if !ok {
 		return fmt.Errorf("enums must be strings")
 	}
 
-	*e = NotificationType(str)
+	*e = SortOrder(str)
 	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid NotificationType", str)
+		return fmt.Errorf("%s is not a valid SortOrder", str)
 	}
 	return nil
 }
 
-func (e NotificationType) MarshalGQL(w io.Writer) {
+func (e SortOrder) MarshalGQL(w io.Writer) {
 	fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
-func (e *NotificationType) UnmarshalJSON(b []byte) error {
+func (e *SortOrder) UnmarshalJSON(b []byte) error {
 	s, err := strconv.Unquote(string(b))
 	if err != nil {
 		return err
@@ -840,64 +962,63 @@ func (e *NotificationType) UnmarshalJSON(b []byte) error {
 	return e.UnmarshalGQL(s)
 }
 
-func (e NotificationType) MarshalJSON() ([]byte, error) {
+func (e SortOrder) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
 }
 
-type OrderStatus string
+// Status enum for various entities
+type Status string
 
 const (
-	OrderStatusPending         OrderStatus = "PENDING"
-	OrderStatusAccepted        OrderStatus = "ACCEPTED"
-	OrderStatusCaptainArriving OrderStatus = "CAPTAIN_ARRIVING"
-	OrderStatusPickedUp        OrderStatus = "PICKED_UP"
-	OrderStatusInTransit       OrderStatus = "IN_TRANSIT"
-	OrderStatusDelivered       OrderStatus = "DELIVERED"
-	OrderStatusCancelled       OrderStatus = "CANCELLED"
+	StatusActive    Status = "ACTIVE"
+	StatusInactive  Status = "INACTIVE"
+	StatusBlocked   Status = "BLOCKED"
+	StatusSuspended Status = "SUSPENDED"
+	StatusPending   Status = "PENDING"
+	StatusDeleted   Status = "DELETED"
 )
 
-var AllOrderStatus = []OrderStatus{
-	OrderStatusPending,
-	OrderStatusAccepted,
-	OrderStatusCaptainArriving,
-	OrderStatusPickedUp,
-	OrderStatusInTransit,
-	OrderStatusDelivered,
-	OrderStatusCancelled,
+var AllStatus = []Status{
+	StatusActive,
+	StatusInactive,
+	StatusBlocked,
+	StatusSuspended,
+	StatusPending,
+	StatusDeleted,
 }
 
-func (e OrderStatus) IsValid() bool {
+func (e Status) IsValid() bool {
 	switch e {
-	case OrderStatusPending, OrderStatusAccepted, OrderStatusCaptainArriving, OrderStatusPickedUp, OrderStatusInTransit, OrderStatusDelivered, OrderStatusCancelled:
+	case StatusActive, StatusInactive, StatusBlocked, StatusSuspended, StatusPending, StatusDeleted:
 		return true
 	}
 	return false
 }
 
-func (e OrderStatus) String() string {
+func (e Status) String() string {
 	return string(e)
 }
 
-func (e *OrderStatus) UnmarshalGQL(v any) error {
+func (e *Status) UnmarshalGQL(v any) error {
 	str, ok := v.(string)
 	if !ok {
 		return fmt.Errorf("enums must be strings")
 	}
 
-	*e = OrderStatus(str)
+	*e = Status(str)
 	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid OrderStatus", str)
+		return fmt.Errorf("%s is not a valid Status", str)
 	}
 	return nil
 }
 
-func (e OrderStatus) MarshalGQL(w io.Writer) {
+func (e Status) MarshalGQL(w io.Writer) {
 	fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
-func (e *OrderStatus) UnmarshalJSON(b []byte) error {
+func (e *Status) UnmarshalJSON(b []byte) error {
 	s, err := strconv.Unquote(string(b))
 	if err != nil {
 		return err
@@ -905,439 +1026,13 @@ func (e *OrderStatus) UnmarshalJSON(b []byte) error {
 	return e.UnmarshalGQL(s)
 }
 
-func (e OrderStatus) MarshalJSON() ([]byte, error) {
+func (e Status) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
 }
 
-type ParcelType string
-
-const (
-	ParcelTypeDocument    ParcelType = "DOCUMENT"
-	ParcelTypePackage     ParcelType = "PACKAGE"
-	ParcelTypeFood        ParcelType = "FOOD"
-	ParcelTypeFragile     ParcelType = "FRAGILE"
-	ParcelTypeElectronics ParcelType = "ELECTRONICS"
-	ParcelTypeClothing    ParcelType = "CLOTHING"
-	ParcelTypeGroceries   ParcelType = "GROCERIES"
-	ParcelTypeMedicines   ParcelType = "MEDICINES"
-	ParcelTypeOther       ParcelType = "OTHER"
-)
-
-var AllParcelType = []ParcelType{
-	ParcelTypeDocument,
-	ParcelTypePackage,
-	ParcelTypeFood,
-	ParcelTypeFragile,
-	ParcelTypeElectronics,
-	ParcelTypeClothing,
-	ParcelTypeGroceries,
-	ParcelTypeMedicines,
-	ParcelTypeOther,
-}
-
-func (e ParcelType) IsValid() bool {
-	switch e {
-	case ParcelTypeDocument, ParcelTypePackage, ParcelTypeFood, ParcelTypeFragile, ParcelTypeElectronics, ParcelTypeClothing, ParcelTypeGroceries, ParcelTypeMedicines, ParcelTypeOther:
-		return true
-	}
-	return false
-}
-
-func (e ParcelType) String() string {
-	return string(e)
-}
-
-func (e *ParcelType) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = ParcelType(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid ParcelType", str)
-	}
-	return nil
-}
-
-func (e ParcelType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *ParcelType) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e ParcelType) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
-type PaymentMethod string
-
-const (
-	PaymentMethodCash       PaymentMethod = "CASH"
-	PaymentMethodCard       PaymentMethod = "CARD"
-	PaymentMethodWallet     PaymentMethod = "WALLET"
-	PaymentMethodUpi        PaymentMethod = "UPI"
-	PaymentMethodNetBanking PaymentMethod = "NET_BANKING"
-)
-
-var AllPaymentMethod = []PaymentMethod{
-	PaymentMethodCash,
-	PaymentMethodCard,
-	PaymentMethodWallet,
-	PaymentMethodUpi,
-	PaymentMethodNetBanking,
-}
-
-func (e PaymentMethod) IsValid() bool {
-	switch e {
-	case PaymentMethodCash, PaymentMethodCard, PaymentMethodWallet, PaymentMethodUpi, PaymentMethodNetBanking:
-		return true
-	}
-	return false
-}
-
-func (e PaymentMethod) String() string {
-	return string(e)
-}
-
-func (e *PaymentMethod) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = PaymentMethod(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid PaymentMethod", str)
-	}
-	return nil
-}
-
-func (e PaymentMethod) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *PaymentMethod) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e PaymentMethod) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
-type PaymentStatus string
-
-const (
-	PaymentStatusPending  PaymentStatus = "PENDING"
-	PaymentStatusPaid     PaymentStatus = "PAID"
-	PaymentStatusRefunded PaymentStatus = "REFUNDED"
-	PaymentStatusFailed   PaymentStatus = "FAILED"
-)
-
-var AllPaymentStatus = []PaymentStatus{
-	PaymentStatusPending,
-	PaymentStatusPaid,
-	PaymentStatusRefunded,
-	PaymentStatusFailed,
-}
-
-func (e PaymentStatus) IsValid() bool {
-	switch e {
-	case PaymentStatusPending, PaymentStatusPaid, PaymentStatusRefunded, PaymentStatusFailed:
-		return true
-	}
-	return false
-}
-
-func (e PaymentStatus) String() string {
-	return string(e)
-}
-
-func (e *PaymentStatus) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = PaymentStatus(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid PaymentStatus", str)
-	}
-	return nil
-}
-
-func (e PaymentStatus) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *PaymentStatus) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e PaymentStatus) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
-type Provider string
-
-const (
-	ProviderGoogle Provider = "GOOGLE"
-	ProviderApple  Provider = "APPLE"
-)
-
-var AllProvider = []Provider{
-	ProviderGoogle,
-	ProviderApple,
-}
-
-func (e Provider) IsValid() bool {
-	switch e {
-	case ProviderGoogle, ProviderApple:
-		return true
-	}
-	return false
-}
-
-func (e Provider) String() string {
-	return string(e)
-}
-
-func (e *Provider) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = Provider(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid Provider", str)
-	}
-	return nil
-}
-
-func (e Provider) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *Provider) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e Provider) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
-type TicketCategory string
-
-const (
-	TicketCategoryOrderIssue      TicketCategory = "ORDER_ISSUE"
-	TicketCategoryPayment         TicketCategory = "PAYMENT"
-	TicketCategoryAccount         TicketCategory = "ACCOUNT"
-	TicketCategoryCaptainBehavior TicketCategory = "CAPTAIN_BEHAVIOR"
-	TicketCategoryAppBug          TicketCategory = "APP_BUG"
-	TicketCategoryFeatureRequest  TicketCategory = "FEATURE_REQUEST"
-	TicketCategoryOther           TicketCategory = "OTHER"
-)
-
-var AllTicketCategory = []TicketCategory{
-	TicketCategoryOrderIssue,
-	TicketCategoryPayment,
-	TicketCategoryAccount,
-	TicketCategoryCaptainBehavior,
-	TicketCategoryAppBug,
-	TicketCategoryFeatureRequest,
-	TicketCategoryOther,
-}
-
-func (e TicketCategory) IsValid() bool {
-	switch e {
-	case TicketCategoryOrderIssue, TicketCategoryPayment, TicketCategoryAccount, TicketCategoryCaptainBehavior, TicketCategoryAppBug, TicketCategoryFeatureRequest, TicketCategoryOther:
-		return true
-	}
-	return false
-}
-
-func (e TicketCategory) String() string {
-	return string(e)
-}
-
-func (e *TicketCategory) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = TicketCategory(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid TicketCategory", str)
-	}
-	return nil
-}
-
-func (e TicketCategory) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *TicketCategory) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e TicketCategory) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
-type TicketPriority string
-
-const (
-	TicketPriorityLow    TicketPriority = "LOW"
-	TicketPriorityMedium TicketPriority = "MEDIUM"
-	TicketPriorityHigh   TicketPriority = "HIGH"
-	TicketPriorityUrgent TicketPriority = "URGENT"
-)
-
-var AllTicketPriority = []TicketPriority{
-	TicketPriorityLow,
-	TicketPriorityMedium,
-	TicketPriorityHigh,
-	TicketPriorityUrgent,
-}
-
-func (e TicketPriority) IsValid() bool {
-	switch e {
-	case TicketPriorityLow, TicketPriorityMedium, TicketPriorityHigh, TicketPriorityUrgent:
-		return true
-	}
-	return false
-}
-
-func (e TicketPriority) String() string {
-	return string(e)
-}
-
-func (e *TicketPriority) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = TicketPriority(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid TicketPriority", str)
-	}
-	return nil
-}
-
-func (e TicketPriority) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *TicketPriority) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e TicketPriority) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
-type TicketStatus string
-
-const (
-	TicketStatusOpen       TicketStatus = "OPEN"
-	TicketStatusInProgress TicketStatus = "IN_PROGRESS"
-	TicketStatusResolved   TicketStatus = "RESOLVED"
-	TicketStatusClosed     TicketStatus = "CLOSED"
-)
-
-var AllTicketStatus = []TicketStatus{
-	TicketStatusOpen,
-	TicketStatusInProgress,
-	TicketStatusResolved,
-	TicketStatusClosed,
-}
-
-func (e TicketStatus) IsValid() bool {
-	switch e {
-	case TicketStatusOpen, TicketStatusInProgress, TicketStatusResolved, TicketStatusClosed:
-		return true
-	}
-	return false
-}
-
-func (e TicketStatus) String() string {
-	return string(e)
-}
-
-func (e *TicketStatus) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = TicketStatus(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid TicketStatus", str)
-	}
-	return nil
-}
-
-func (e TicketStatus) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *TicketStatus) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e TicketStatus) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
+// Time of day for analytics
 type TimeOfDay string
 
 const (
@@ -1397,130 +1092,7 @@ func (e TimeOfDay) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-type TransactionStatus string
-
-const (
-	TransactionStatusPending  TransactionStatus = "PENDING"
-	TransactionStatusSuccess  TransactionStatus = "SUCCESS"
-	TransactionStatusFailed   TransactionStatus = "FAILED"
-	TransactionStatusRefunded TransactionStatus = "REFUNDED"
-)
-
-var AllTransactionStatus = []TransactionStatus{
-	TransactionStatusPending,
-	TransactionStatusSuccess,
-	TransactionStatusFailed,
-	TransactionStatusRefunded,
-}
-
-func (e TransactionStatus) IsValid() bool {
-	switch e {
-	case TransactionStatusPending, TransactionStatusSuccess, TransactionStatusFailed, TransactionStatusRefunded:
-		return true
-	}
-	return false
-}
-
-func (e TransactionStatus) String() string {
-	return string(e)
-}
-
-func (e *TransactionStatus) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = TransactionStatus(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid TransactionStatus", str)
-	}
-	return nil
-}
-
-func (e TransactionStatus) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *TransactionStatus) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e TransactionStatus) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
-type TransactionType string
-
-const (
-	TransactionTypeOrderPayment TransactionType = "ORDER_PAYMENT"
-	TransactionTypeRefund       TransactionType = "REFUND"
-	TransactionTypeWalletTopup  TransactionType = "WALLET_TOPUP"
-	TransactionTypeWithdrawal   TransactionType = "WITHDRAWAL"
-	TransactionTypeCommission   TransactionType = "COMMISSION"
-	TransactionTypeBonus        TransactionType = "BONUS"
-	TransactionTypeTip          TransactionType = "TIP"
-)
-
-var AllTransactionType = []TransactionType{
-	TransactionTypeOrderPayment,
-	TransactionTypeRefund,
-	TransactionTypeWalletTopup,
-	TransactionTypeWithdrawal,
-	TransactionTypeCommission,
-	TransactionTypeBonus,
-	TransactionTypeTip,
-}
-
-func (e TransactionType) IsValid() bool {
-	switch e {
-	case TransactionTypeOrderPayment, TransactionTypeRefund, TransactionTypeWalletTopup, TransactionTypeWithdrawal, TransactionTypeCommission, TransactionTypeBonus, TransactionTypeTip:
-		return true
-	}
-	return false
-}
-
-func (e TransactionType) String() string {
-	return string(e)
-}
-
-func (e *TransactionType) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = TransactionType(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid TransactionType", str)
-	}
-	return nil
-}
-
-func (e TransactionType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *TransactionType) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e TransactionType) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
+// User roles
 type UserRole string
 
 const (
@@ -1578,13 +1150,15 @@ func (e UserRole) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// User account status
 type UserStatus string
 
 const (
-	UserStatusActive     UserStatus = "ACTIVE"
-	UserStatusBlocked    UserStatus = "BLOCKED"
-	UserStatusPendingKyc UserStatus = "PENDING_KYC"
-	UserStatusSuspended  UserStatus = "SUSPENDED"
+	UserStatusActive      UserStatus = "ACTIVE"
+	UserStatusBlocked     UserStatus = "BLOCKED"
+	UserStatusPendingKyc  UserStatus = "PENDING_KYC"
+	UserStatusSuspended   UserStatus = "SUSPENDED"
+	UserStatusDeactivated UserStatus = "DEACTIVATED"
 )
 
 var AllUserStatus = []UserStatus{
@@ -1592,11 +1166,12 @@ var AllUserStatus = []UserStatus{
 	UserStatusBlocked,
 	UserStatusPendingKyc,
 	UserStatusSuspended,
+	UserStatusDeactivated,
 }
 
 func (e UserStatus) IsValid() bool {
 	switch e {
-	case UserStatusActive, UserStatusBlocked, UserStatusPendingKyc, UserStatusSuspended:
+	case UserStatusActive, UserStatusBlocked, UserStatusPendingKyc, UserStatusSuspended, UserStatusDeactivated:
 		return true
 	}
 	return false
@@ -1637,6 +1212,7 @@ func (e UserStatus) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Vehicle types for captains
 type VehicleType string
 
 const (

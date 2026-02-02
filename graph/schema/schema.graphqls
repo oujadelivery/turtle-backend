@@ -1,53 +1,89 @@
+# ============================================================================
+# ROOT SCHEMA
+# Main entry points for GraphQL API
+# ============================================================================
+
+"""
+Root Query type - all read operations
+"""
+type Query {
+  """
+  Health check endpoint
+  Returns true if API is healthy
+  """
+  health: Boolean!
+  
+  """
+  API version information
+  """
+  version: String!
+  
+  # User queries defined in user.graphqls
+  # Address queries defined in address.graphqls
+  # Auth queries defined in auth.graphqls
+}
+
+"""
+Root Mutation type - all write operations
+"""
+type Mutation {
+  """
+  Placeholder field (actual mutations defined in other schema files)
+  """
+  _placeholder: Boolean
+  
+  # Authentication mutations defined in auth.graphqls
+  # User mutations defined in user.graphqls
+  # Address mutations defined in address.graphqls
+}
+
+"""
+Root Subscription type - real-time updates
+"""
+type Subscription {
+  """
+  Subscribe to user profile updates
+  Notifies when user profile changes
+  """
+  userUpdated(userID: ID!): User! @auth
+  
+  """
+  Subscribe to captain location updates
+  Notifies when captain moves (for customers tracking their delivery)
+  """
+  captainLocationUpdated(captainID: ID!): Location!
+  
+  """
+  Subscribe to captain availability changes
+  Notifies when captain goes online/offline
+  """
+  captainAvailabilityChanged(captainID: ID!): CaptainAvailability!
+}
+
+"""
+CaptainAvailability represents captain's online/offline status
+"""
+type CaptainAvailability {
+  """Captain ID"""
+  captainID: ID!
+  
+  """Is captain available?"""
+  isAvailable: Boolean!
+  
+  """Current location if available"""
+  location: Location
+  
+  """Timestamp of change"""
+  timestamp: Time!
+}
+
+# ============================================================================
+# SCHEMA DIRECTIVES
+# Enable federation and other features
+# ============================================================================
+
 schema {
   query: Query
   mutation: Mutation
   subscription: Subscription
-}
-
-type Query {
-  _empty: String
-}
-
-type Mutation {
-  _empty: String
-}
-
-type Subscription {
-  _empty: String
-}
-
-# Common scalars
-scalar Time
-scalar JSON
-
-# Common types
-type PaginationInfo {
-  total: Int!
-  page: Int!
-  pageSize: Int!
-  totalPages: Int!
-  hasNext: Boolean!
-  hasPrev: Boolean!
-}
-
-input PaginationInput {
-  page: Int = 1
-  pageSize: Int = 20
-}
-
-# Common response
-interface Response {
-  success: Boolean!
-  message: String
-}
-
-type SuccessResponse implements Response {
-  success: Boolean!
-  message: String
-}
-
-type ErrorResponse implements Response {
-  success: Boolean!
-  message: String
-  code: String
 }

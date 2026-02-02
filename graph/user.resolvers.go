@@ -7,382 +7,374 @@ package graph
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"time"
-	"turtle/db"
-	"turtle/graph/generated"
 	"turtle/graph/model"
-	"turtle/middlewares"
-	"turtle/models"
+	"turtle/internal/domain"
+	"turtle/internal/domain/aggregates"
+	"turtle/internal/domain/valueobjects"
+	pkgErrors "turtle/pkg/errors"
 )
 
-// UpdateProfile is the resolver for the updateProfile field.
-func (r *mutationResolver) UpdateProfile(ctx context.Context, input model.UpdateProfileInput) (*models.User, error) {
-	authUser, err := middlewares.RequireAuth(ctx)
-	if err != nil {
-		return nil, err
+// UpdateProfile updates user profile
+func (r *mutationResolver) UpdateProfile(ctx context.Context, input model.UpdateProfileInput) (*model.User, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	user, err := r.Resolver.UserService.UpdateProfile(
-		authUser.UserID,
-		input.FirstName,
-		input.LastName,
-		input.Email,
-		input.Phone,
-	)
+	// Fetch user
+	user, err := r.Resolver.userService.GetUser(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
 	}
 
-	return user, nil
+	// Handle profile picture upload if provided
+	profilePic := user.ProfilePic()
+	if input.ProfilePic != nil {
+		// TODO: Upload file and get URL
+		// uploadedURL, err := uploadFile(ctx, input.ProfilePic)
+		// profilePic = uploadedURL
+	}
+
+	// Update profile
+	firstName := stringValue(input.FirstName)
+	if firstName == "" {
+		firstName = user.FirstName()
+	}
+
+	lastName := stringValue(input.LastName)
+	if lastName == "" {
+		lastName = user.LastName()
+	}
+
+	// Save changes
+	user, err = r.Resolver.userService.UpdateProfile(ctx, userID, firstName, lastName, profilePic)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	return userToGraphQL(user), nil
 }
 
-// UpdateProfilePicture is the resolver for the updateProfilePicture field.
-func (r *mutationResolver) UpdateProfilePicture(ctx context.Context, imageURL string) (*models.User, error) {
-	authUser, err := middlewares.RequireAuth(ctx)
-	if err != nil {
-		return nil, err
+// UpdateVehicle updates captain's vehicle information
+func (r *mutationResolver) UpdateVehicle(ctx context.Context, input model.UpdateVehicleInput) (*model.CaptainProfile, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	user, err := r.Resolver.UserService.UpdateProfilePicture(authUser.UserID, imageURL)
-	if err != nil {
-		return nil, err
-	}
-
-	return user, nil
-}
-
-// UpdateCaptainProfile is the resolver for the updateCaptainProfile field.
-func (r *mutationResolver) UpdateCaptainProfile(ctx context.Context, input model.UpdateCaptainProfileInput) (*models.User, error) {
-	authUser, err := middlewares.RequireRole(ctx, RoleCaptain)
-	if err != nil {
-		return nil, err
-	}
-
-	var licenseExpiry *time.Time
-	if input.LicenseExpiry != nil {
-		licenseExpiry = input.LicenseExpiry
-	}
-
-	user, err := r.Resolver.UserService.UpdateCaptainProfile(
-		authUser.UserID,
-		input.VehicleType,
+	user, err := r.Resolver.userService.UpdateVehicle(
+		ctx,
+		userID,
+		aggregates.VehicleType(input.VehicleType),
 		input.VehicleNumber,
 		input.VehicleModel,
-		input.LicenseNumber,
-		licenseExpiry,
 	)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
 	}
 
-	return user, nil
+	return captainProfileToGraphQL(user.CaptainProfile()), nil
 }
 
-// ToggleAvailability is the resolver for the toggleAvailability field.
-func (r *mutationResolver) ToggleAvailability(ctx context.Context, isAvailable bool) (*models.User, error) {
-	authUser, err := middlewares.RequireRole(ctx, RoleCaptain)
-	if err != nil {
-		return nil, err
+// SubmitKyc submits KYC documents
+func (r *mutationResolver) SubmitKyc(ctx context.Context, input model.SubmitKYCInput) (*model.CaptainProfile, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	user, err := r.Resolver.UserService.ToggleAvailability(authUser.UserID, isAvailable)
+	documents := map[string]string{
+		"LICENSE":       "url_to_license",
+		"VEHICLE_RC":    "url_to_rc",
+		"PROFILE_PHOTO": "url_to_photo",
+	}
+	user, err := r.Resolver.userService.SubmitKYC(ctx, userID, documents)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
 	}
 
-	return user, nil
+	return captainProfileToGraphQL(user.CaptainProfile()), nil
 }
 
-// UpdateCurrentLocation is the resolver for the updateCurrentLocation field.
-func (r *mutationResolver) UpdateCurrentLocation(ctx context.Context, latitude float64, longitude float64) (*models.User, error) {
-	authUser, err := middlewares.RequireAuth(ctx)
-	if err != nil {
-		return nil, err
+// GoOnline sets captain as available
+func (r *mutationResolver) GoOnline(ctx context.Context, input model.GoOnlineInput) (bool, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return false, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	user, err := r.Resolver.UserService.UpdateCurrentLocation(authUser.UserID, latitude, longitude)
+	// Fetch user
+	_, err := r.Resolver.userService.GetUser(ctx, userID)
 	if err != nil {
-		return nil, err
+		return false, handleError(ctx, err)
 	}
 
-	return user, nil
+	// Create location
+	location, err := valueobjects.NewLocation(input.Location.Latitude, input.Location.Longitude)
+	if err != nil {
+		return false, handleError(ctx, err)
+	}
+
+	// Save changes
+	err = r.Resolver.userService.GoOnline(ctx, userID, location)
+	if err != nil {
+		return false, handleError(ctx, err)
+	}
+
+	return true, nil
 }
 
-// SubmitKYCDocuments is the resolver for the submitKYCDocuments field.
-func (r *mutationResolver) SubmitKYCDocuments(ctx context.Context, input model.KYCDocumentsInput) (*models.User, error) {
-	authUser, err := middlewares.RequireRole(ctx, RoleCaptain)
+// GoOffline sets captain as unavailable
+func (r *mutationResolver) GoOffline(ctx context.Context) (bool, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return false, pkgErrors.ErrUnauthorized("Not authenticated")
+	}
+
+	// Fetch user
+	_, err := r.Resolver.userService.GetUser(ctx, userID)
 	if err != nil {
-		return nil, err
+		return false, handleError(ctx, err)
 	}
 
-	// Convert documents to JSON
-	documentsJSON, err := json.Marshal(input.AadhaarURL)
+	// Go offline
+	err = r.Resolver.userService.GoOffline(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to process documents: %w", err)
+		return false, handleError(ctx, err)
 	}
 
-	updates := map[string]interface{}{
-		"kyc_documents": string(documentsJSON),
-		"kyc_status":    "PENDING",
-	}
-
-	if err := db.DB.Model(&models.User{}).Where("id = ?", authUser.UserID).
-		Updates(updates).Error; err != nil {
-		return nil, err
-	}
-
-	return r.Resolver.UserService.GetUserByID(authUser.UserID)
+	return true, nil
 }
 
-// UpdateUserStatus is the resolver for the updateUserStatus field.
-func (r *mutationResolver) UpdateUserStatus(ctx context.Context, userID int, status model.UserStatus) (*models.User, error) {
-	_, err := middlewares.RequireRole(ctx, RoleAdmin)
-	if err != nil {
-		return nil, err
+// UpdateLocation updates captain's current location
+func (r *mutationResolver) UpdateLocation(ctx context.Context, input model.UpdateLocationInput) (bool, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return false, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	user, err := r.Resolver.UserService.UpdateUserStatus(uint(userID), string(status))
+	// Create location
+	location, err := valueobjects.NewLocation(input.Location.Latitude, input.Location.Longitude)
 	if err != nil {
-		return nil, err
+		return false, handleError(ctx, err)
 	}
 
-	return user, nil
+	// Update location directly in repository (lightweight operation)
+	err = r.Resolver.userService.UpdateLocation(ctx, userID, location.Latitude(), location.Longitude())
+	if err != nil {
+		return false, handleError(ctx, err)
+	}
+
+	return true, nil
 }
 
-// ApproveKyc is the resolver for the approveKYC field.
-func (r *mutationResolver) ApproveKyc(ctx context.Context, userID int, approved bool, reason *string) (*models.User, error) {
-	_, err := middlewares.RequireRole(ctx, RoleAdmin)
-	if err != nil {
-		return nil, err
+// ApproveKyc approves captain KYC (admin only)
+func (r *mutationResolver) ApproveKyc(ctx context.Context, captainID string, reason *string) (*model.User, error) {
+	// Check if user is admin
+	if !isAdmin(ctx) {
+		return nil, pkgErrors.ErrForbidden("Only admins can approve KYC")
 	}
 
-	user, err := r.Resolver.UserService.ApproveKYC(uint(userID), approved, reason)
+	updatedUser, err := r.Resolver.userService.ApproveKYC(ctx, captainID)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
 	}
 
-	return user, nil
+	return userToGraphQL(updatedUser), nil
 }
 
-// BlockUser is the resolver for the blockUser field.
-func (r *mutationResolver) BlockUser(ctx context.Context, userID int, reason string) (*models.User, error) {
-	_, err := middlewares.RequireRole(ctx, RoleAdmin)
-	if err != nil {
-		return nil, err
+// RejectKyc rejects captain KYC (admin only)
+func (r *mutationResolver) RejectKyc(ctx context.Context, captainID string, reason string) (*model.User, error) {
+	if !isAdmin(ctx) {
+		return nil, pkgErrors.ErrForbidden("Only admins can reject KYC")
 	}
 
-	user, err := r.Resolver.UserService.UpdateUserStatus(uint(userID), "BLOCKED")
+	updatedUser, err := r.Resolver.userService.RejectKYC(ctx, captainID, reason)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
 	}
 
-	// TODO: Log the block reason
-	_ = reason
-
-	return user, nil
+	return userToGraphQL(updatedUser), nil
 }
 
-// UnblockUser is the resolver for the unblockUser field.
-func (r *mutationResolver) UnblockUser(ctx context.Context, userID int) (*models.User, error) {
-	_, err := middlewares.RequireRole(ctx, RoleAdmin)
-	if err != nil {
-		return nil, err
+// BlockUser blocks a user account (admin only)
+func (r *mutationResolver) BlockUser(ctx context.Context, userID string, reason string) (*model.User, error) {
+	if !isAdmin(ctx) {
+		return nil, pkgErrors.ErrForbidden("Only admins can block users")
 	}
 
-	user, err := r.Resolver.UserService.UpdateUserStatus(uint(userID), "ACTIVE")
+	updatedUser, err := r.Resolver.userService.BlockUser(ctx, userID, reason)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
 	}
 
-	return user, nil
+	return userToGraphQL(updatedUser), nil
 }
 
-// Me is the resolver for the me field.
-func (r *queryResolver) Me(ctx context.Context) (*models.User, error) {
-	authUser, err := middlewares.RequireAuth(ctx)
-	if err != nil {
-		return nil, err
+// UnblockUser unblocks a user account (admin only)
+func (r *mutationResolver) UnblockUser(ctx context.Context, userID string) (*model.User, error) {
+	if !isAdmin(ctx) {
+		return nil, pkgErrors.ErrForbidden("Only admins can unblock users")
 	}
 
-	user, err := r.Resolver.UserService.GetUserByID(authUser.UserID)
+	updatedUser, err := r.Resolver.userService.UnblockUser(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
 	}
 
-	return user, nil
+	return userToGraphQL(updatedUser), nil
 }
 
-// User is the resolver for the user field.
-func (r *queryResolver) User(ctx context.Context, id int) (*models.User, error) {
-	user, err := r.Resolver.UserService.GetUserByID(uint(id))
+// User returns user by ID
+func (r *queryResolver) User(ctx context.Context, id string) (*model.User, error) {
+	user, err := r.Resolver.userService.GetUser(ctx, id)
 	if err != nil {
-		return nil, err
+		if err == domain.ErrNotFound {
+			return nil, nil
+		}
+		return nil, handleError(ctx, err)
 	}
 
-	return user, nil
+	return userToGraphQL(user), nil
 }
 
-// SearchUsers is the resolver for the searchUsers field.
-func (r *queryResolver) SearchUsers(ctx context.Context, query string, role *model.UserRole, pagination *model.PaginationInput) (*model.UserConnection, error) {
-	_, err := middlewares.RequireRole(ctx, RoleAdmin)
-	if err != nil {
-		return nil, err
+// SearchUsers searches users (admin only)
+func (r *queryResolver) SearchUsers(ctx context.Context, input model.UserSearchInput) (*model.UserConnection, error) {
+	if !isAdmin(ctx) {
+		return nil, pkgErrors.ErrForbidden("Only admins can search users")
 	}
 
-	page, pageSize := getPaginationParams(pagination)
-
-	roleStr := ""
-	if role != nil {
-		roleStr = string(*role)
+	query := stringValue(input.Query)
+	role := ""
+	if input.Role != nil {
+		role = string(*input.Role)
 	}
 
-	users, total, err := r.Resolver.UserService.SearchUsers(query, roleStr, page, pageSize)
+	limit := 20
+	if input.Limit != nil {
+		limit = *input.Limit
+	}
+
+	offset := 0
+	if input.Offset != nil {
+		offset = *input.Offset
+	}
+
+	users, total, err := r.Resolver.userService.SearchUsers(ctx, query, role, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
+	}
+
+	edges := make([]*model.UserEdge, len(users))
+	for i, user := range users {
+		edges[i] = &model.UserEdge{
+			Cursor: fmt.Sprintf("%d", offset+i),
+			Node:   userToGraphQL(user),
+		}
 	}
 
 	return &model.UserConnection{
-		Edges: users,
-		PageInfo: &model.PaginationInfo{
-			Total:      int(total),
-			Page:       page,
-			PageSize:   pageSize,
-			TotalPages: (int(total) + pageSize - 1) / pageSize,
-			HasNext:    page*pageSize < int(total),
-			HasPrev:    page > 1,
+		Edges: edges,
+		PageInfo: &model.PageInfo{
+			HasNextPage:     int64(offset+limit) < total,
+			HasPreviousPage: offset > 0,
+			Total:           int(total),
 		},
+		TotalCount: int(total),
 	}, nil
 }
 
-// GetCaptains is the resolver for the getCaptains field.
-func (r *queryResolver) GetCaptains(ctx context.Context, status *model.CaptainStatus, isAvailable *bool, pagination *model.PaginationInput) (*model.UserConnection, error) {
-	_, err := middlewares.RequireRole(ctx, RoleAdmin)
+// PendingKYCCaptains returns captains pending KYC (admin only)
+func (r *queryResolver) PendingKYCCaptains(ctx context.Context, limit *int, offset *int) (*model.UserConnection, error) {
+	if !isAdmin(ctx) {
+		return nil, pkgErrors.ErrForbidden("Only admins can view pending KYC")
+	}
+
+	l := 20
+	if limit != nil {
+		l = *limit
+	}
+
+	o := 0
+	if offset != nil {
+		o = *offset
+	}
+
+	captains, err := r.Resolver.userService.FindCaptainsByStatus(ctx, "PENDING")
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
 	}
 
-	page, pageSize := getPaginationParams(pagination)
-
-	var captains []*models.User
-	var total int64
-
-	query := db.DB.Model(&models.User{}).Where("role = ?", "CAPTAIN")
-
-	if status != nil {
-		query = query.Where("kyc_status = ?", string(*status))
+	// Apply pagination
+	start := o
+	end := o + l
+	if start > len(captains) {
+		start = len(captains)
+	}
+	if end > len(captains) {
+		end = len(captains)
 	}
 
-	if isAvailable != nil {
-		query = query.Where("is_available = ?", *isAvailable)
-	}
+	paginatedCaptains := captains[start:end]
 
-	query.Count(&total)
-
-	offset := (page - 1) * pageSize
-	if err := query.Order("created_at DESC").
-		Offset(offset).Limit(pageSize).
-		Find(&captains).Error; err != nil {
-		return nil, err
+	edges := make([]*model.UserEdge, len(paginatedCaptains))
+	for i, user := range paginatedCaptains {
+		edges[i] = &model.UserEdge{
+			Cursor: fmt.Sprintf("%d", o+i),
+			Node:   userToGraphQL(user),
+		}
 	}
 
 	return &model.UserConnection{
-		Edges: captains,
-		PageInfo: &model.PaginationInfo{
-			Total:      int(total),
-			Page:       page,
-			PageSize:   pageSize,
-			TotalPages: (int(total) + pageSize - 1) / pageSize,
-			HasNext:    page*pageSize < int(total),
-			HasPrev:    page > 1,
+		Edges: edges,
+		PageInfo: &model.PageInfo{
+			HasNextPage:     end < len(captains),
+			HasPreviousPage: start > 0,
+			Total:           len(captains),
 		},
+		TotalCount: len(captains),
 	}, nil
 }
 
-// GetNearbyCaptains is the resolver for the getNearbyCaptains field.
-func (r *queryResolver) GetNearbyCaptains(ctx context.Context, latitude float64, longitude float64, radiusKm float64) ([]*models.User, error) {
-	authUser, err := middlewares.RequireAuth(ctx)
+// NearbyCaptains finds captains near a location
+func (r *queryResolver) NearbyCaptains(ctx context.Context, latitude float64, longitude float64, radiusKm *float64) ([]*model.User, error) {
+	radius := 5.0 // Default 5km
+	if radiusKm != nil {
+		radius = *radiusKm
+	}
+
+	captains, err := r.Resolver.userService.FindCaptainsNearby(ctx, latitude, longitude, radius)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
 	}
 
-	captains, err := r.Resolver.UserService.GetNearbyCaptains(latitude, longitude, radiusKm)
+	result := make([]*model.User, len(captains))
+	for i, captain := range captains {
+		result[i] = userToGraphQL(captain)
+	}
+
+	return result, nil
+}
+
+// UserStats returns user statistics (admin only)
+func (r *queryResolver) UserStats(ctx context.Context) (*model.UserStats, error) {
+	if !isAdmin(ctx) {
+		return nil, pkgErrors.ErrForbidden("Only admins can view statistics")
+	}
+
+	stats, err := r.Resolver.userService.GetUserStats(ctx)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
 	}
 
-	_ = authUser
-	return captains, nil
-}
-
-// ID is the resolver for the id field.
-func (r *userResolver) ID(ctx context.Context, obj *models.User) (int, error) {
-	return int(obj.ID), nil
-}
-
-// FullName is the resolver for the fullName field.
-func (r *userResolver) FullName(ctx context.Context, obj *models.User) (*string, error) {
-	return stringPtr(obj.GetFullName()), nil
-}
-
-// Role is the resolver for the role field.
-func (r *userResolver) Role(ctx context.Context, obj *models.User) (model.UserRole, error) {
-	return model.UserRole(obj.Role), nil
-}
-
-// Status is the resolver for the status field.
-func (r *userResolver) Status(ctx context.Context, obj *models.User) (model.UserStatus, error) {
-	return model.UserStatus(obj.Status), nil
-}
-
-// VehicleType is the resolver for the vehicleType field.
-func (r *userResolver) VehicleType(ctx context.Context, obj *models.User) (*model.VehicleType, error) {
-	if !obj.IsCaptain() || ptrToString(obj.VehicleType) == "" {
-		return nil, nil
-	}
-	// vType := model.VehicleType(obj.VehicleType)
-	vType := model.VehicleTypeBike
-	return &vType, nil
-}
-
-// CurrentLocation is the resolver for the currentLocation field.
-func (r *userResolver) CurrentLocation(ctx context.Context, obj *models.User) (*model.Location, error) {
-	if obj.CurrentLat == 0 && obj.CurrentLng == 0 {
-		return nil, nil
-	}
-
-	return &model.Location{
-		Latitude:  obj.CurrentLat,
-		Longitude: obj.CurrentLng,
+	return &model.UserStats{
+		TotalUsers:       int(stats.TotalUsers),
+		TotalCustomers:   int(stats.TotalCustomers),
+		TotalCaptains:    int(stats.TotalCaptains),
+		TotalAdmins:      int(stats.TotalAdmins),
+		ActiveUsers:      int(stats.ActiveUsers),
+		VerifiedCaptains: int(stats.VerifiedCaptains),
+		OnlineCaptains:   0, // TODO: Calculate from captain availability
 	}, nil
 }
-
-// KycStatus is the resolver for the kycStatus field.
-func (r *userResolver) KycStatus(ctx context.Context, obj *models.User) (*model.CaptainStatus, error) {
-	if !obj.IsCaptain() {
-		return nil, nil
-	}
-	status := model.CaptainStatus(obj.KycStatus)
-	return &status, nil
-}
-
-// KycDocuments is the resolver for the kycDocuments field.
-func (r *userResolver) KycDocuments(ctx context.Context, obj *models.User) ([]string, error) {
-	return  nil, nil
-	// if !obj.IsCaptain() || obj.KycDocuments == "" {
-	// 	return []string{}, nil
-	// }
-
-	// var documents []string
-	// if err := json.Unmarshal([]byte(obj.KycDocuments), &documents); err != nil {
-	// 	return []string{}, nil
-	// }
-
-	// return documents, nil
-}
-
-// User returns generated.UserResolver implementation.
-func (r *Resolver) User() generated.UserResolver { return &userResolver{r} }
-
-type userResolver struct{ *Resolver }

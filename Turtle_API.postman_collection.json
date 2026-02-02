@@ -1,0 +1,718 @@
+{
+	"info": {
+		"_postman_id": "turtle-api-collection",
+		"name": "Turtle Delivery API",
+		"description": "Complete GraphQL API collection for Turtle delivery and ride-sharing platform",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "1. Request OTP",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"OTP sent successfully\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.data.requestOTP.success).to.eql(true);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation RequestOTP($phone: String!, $purpose: OTPPurpose!) {\n  requestOTP(input: {\n    phone: $phone\n    purpose: $purpose\n  }) {\n    success\n    message\n    target\n    expiresAt\n  }\n}",
+								"variables": "{\n  \"phone\": \"+1234567890\",\n  \"purpose\": \"LOGIN\"\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "2. Verify OTP & Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Save tokens\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.environment.set(\"accessToken\", jsonData.data.verifyOTP.tokens.accessToken);",
+									"    pm.environment.set(\"refreshToken\", jsonData.data.verifyOTP.tokens.refreshToken);",
+									"    pm.environment.set(\"userId\", jsonData.data.verifyOTP.user.id);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation VerifyOTP($phone: String!, $code: String!, $purpose: OTPPurpose!, $deviceType: DeviceType!, $deviceInfo: String!) {\n  verifyOTP(input: {\n    phone: $phone\n    code: $code\n    purpose: $purpose\n    deviceType: $deviceType\n    deviceInfo: $deviceInfo\n  }) {\n    tokens {\n      accessToken\n      refreshToken\n      expiresAt\n      tokenType\n    }\n    user {\n      id\n      firstName\n      lastName\n      phone\n      role\n      status\n    }\n    isNewUser\n  }\n}",
+								"variables": "{\n  \"phone\": \"+1234567890\",\n  \"code\": \"123456\",\n  \"purpose\": \"LOGIN\",\n  \"deviceType\": \"WEB\",\n  \"deviceInfo\": \"Postman\"\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "3. Get Current User (Me)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "query Me {\n  me {\n    id\n    firstName\n    lastName\n    email\n    phone\n    phoneVerified\n    role\n    status\n    profilePic\n    createdAt\n    updatedAt\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "4. Refresh Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Save new token\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.environment.set(\"accessToken\", jsonData.data.refreshToken.accessToken);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation RefreshToken($refreshToken: String!) {\n  refreshToken(input: { refreshToken: $refreshToken }) {\n    accessToken\n    refreshToken\n    expiresAt\n    tokenType\n  }\n}",
+								"variables": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "5. My Sessions",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "query MySessions {\n  mySessions {\n    id\n    device\n    deviceInfo\n    lastUsedAt\n    createdAt\n    expiresAt\n    isActive\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "6. Logout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation Logout {\n  logout\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "7. Logout All Devices",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation LogoutAll {\n  logoutAll\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "User Management",
+			"item": [
+				{
+					"name": "1. Update Profile",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation UpdateProfile($firstName: String!, $lastName: String!) {\n  updateProfile(input: {\n    firstName: $firstName\n    lastName: $lastName\n  }) {\n    id\n    firstName\n    lastName\n    updatedAt\n  }\n}",
+								"variables": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\"\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "2. Become Captain",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation BecomeCaptain {\n  becomeCaptain(input: {\n    vehicleType: CAR\n    vehicleNumber: \"ABC-1234\"\n    vehicleModel: \"Toyota Camry 2020\"\n  }) {\n    id\n    role\n    captainProfile {\n      vehicleType\n      vehicleNumber\n      vehicleModel\n      kycStatus\n    }\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "3. Submit KYC",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation SubmitKYC {\n  submitKYC(input: {\n    documents: {\n      driverLicense: \"https://example.com/license.jpg\"\n      vehicleRegistration: \"https://example.com/reg.jpg\"\n      insurance: \"https://example.com/insurance.jpg\"\n    }\n  }) {\n    kycStatus\n    kycDocuments\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "4. Go Online (Captain)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation GoOnline {\n  goOnline(input: {\n    location: {\n      latitude: 37.7749\n      longitude: -122.4194\n    }\n  })\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "5. Update Location (Captain)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation UpdateLocation {\n  updateLocation(input: {\n    location: {\n      latitude: 37.7750\n      longitude: -122.4195\n    }\n  })\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "6. Go Offline (Captain)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation GoOffline {\n  goOffline\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "7. Find Nearby Captains",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "query NearbyCaptains {\n  nearbyCaptains(\n    latitude: 37.7749\n    longitude: -122.4194\n    radiusKm: 5.0\n  ) {\n    id\n    firstName\n    profilePic\n    captainProfile {\n      vehicleType\n      rating\n      isAvailable\n    }\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Address Management",
+			"item": [
+				{
+					"name": "1. Create Address",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Save address ID\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.environment.set(\"addressId\", jsonData.data.createAddress.id);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation CreateAddress {\n  createAddress(input: {\n    label: HOME\n    addressLine1: \"123 Main St\"\n    addressLine2: \"Apt 4B\"\n    city: \"San Francisco\"\n    state: \"CA\"\n    postalCode: \"94102\"\n    location: {\n      latitude: 37.7749\n      longitude: -122.4194\n    }\n    setAsDefault: true\n  }) {\n    id\n    label\n    formattedAddress\n    isDefault\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "2. My Addresses",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "query MyAddresses {\n  myAddresses {\n    id\n    label\n    formattedAddress\n    city\n    state\n    isDefault\n    usageCount\n    createdAt\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "3. Get Address by ID",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "query GetAddress($id: ID!) {\n  address(id: $id) {\n    id\n    label\n    addressLine1\n    addressLine2\n    city\n    state\n    location {\n      latitude\n      longitude\n    }\n    isDefault\n  }\n}",
+								"variables": "{\n  \"id\": \"{{addressId}}\"\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "4. Update Address",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation UpdateAddress($id: ID!) {\n  updateAddress(input: {\n    id: $id\n    label: WORK\n    addressLine1: \"456 Market St\"\n  }) {\n    id\n    label\n    formattedAddress\n  }\n}",
+								"variables": "{\n  \"id\": \"{{addressId}}\"\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "5. Set Default Address",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation SetDefaultAddress($id: ID!) {\n  setDefaultAddress(id: $id) {\n    id\n    isDefault\n  }\n}",
+								"variables": "{\n  \"id\": \"{{addressId}}\"\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "6. Suggested Addresses",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "query SuggestedAddresses {\n  suggestedAddresses(limit: 3) {\n    address {\n      id\n      label\n      formattedAddress\n    }\n    confidence\n    reason\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "7. Delete Address",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation DeleteAddress($id: ID!) {\n  deleteAddress(id: $id)\n}",
+								"variables": "{\n  \"id\": \"{{addressId}}\"\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Admin Operations",
+			"item": [
+				{
+					"name": "1. Search Users",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "query SearchUsers {\n  searchUsers(input: {\n    query: \"john\"\n    role: CAPTAIN\n    limit: 20\n  }) {\n    edges {\n      node {\n        id\n        firstName\n        phone\n        role\n      }\n    }\n    totalCount\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "2. Approve KYC",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation ApproveKYC($captainID: ID!) {\n  approveKYC(\n    captainID: $captainID\n    reason: \"All documents verified\"\n  ) {\n    id\n    captainProfile {\n      kycStatus\n      kycApprovedAt\n    }\n  }\n}",
+								"variables": "{\n  \"captainID\": \"captain_123\"\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "3. Reject KYC",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation RejectKYC($captainID: ID!, $reason: String!) {\n  rejectKYC(captainID: $captainID, reason: $reason) {\n    id\n    captainProfile {\n      kycStatus\n      kycRejectionReason\n    }\n  }\n}",
+								"variables": "{\n  \"captainID\": \"captain_123\",\n  \"reason\": \"Invalid driver license\"\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "4. Block User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "mutation BlockUser($userID: ID!, $reason: String!) {\n  blockUser(userID: $userID, reason: $reason) {\n    id\n    status\n    blockedReason\n  }\n}",
+								"variables": "{\n  \"userID\": \"user_123\",\n  \"reason\": \"Violating terms\"\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				},
+				{
+					"name": "5. User Statistics",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{accessToken}}"
+							}
+						],
+						"body": {
+							"mode": "graphql",
+							"graphql": {
+								"query": "query UserStats {\n  userStats {\n    totalUsers\n    totalCustomers\n    totalCaptains\n    activeUsers\n    verifiedCaptains\n    onlineCaptains\n  }\n}"
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}",
+							"host": ["{{baseUrl}}"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Health Check",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "graphql",
+					"graphql": {
+						"query": "query Health {\n  health\n}"
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}",
+					"host": ["{{baseUrl}}"]
+				}
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080/graphql",
+			"type": "string"
+		},
+		{
+			"key": "accessToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "refreshToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "userId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "addressId",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

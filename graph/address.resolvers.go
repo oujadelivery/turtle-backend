@@ -7,236 +7,369 @@ package graph
 
 import (
 	"context"
-	"turtle/graph/generated"
+	"fmt"
 	"turtle/graph/model"
-	"turtle/middlewares"
-	"turtle/models"
-	"turtle/services/address"
+	"turtle/internal/domain"
+	"turtle/internal/domain/aggregates"
+	"turtle/internal/domain/valueobjects"
+	pkgErrors "turtle/pkg/errors"
+
+	"github.com/google/uuid"
 )
 
-// ID is the resolver for the id field.
-func (r *addressResolver) ID(ctx context.Context, obj *models.Address) (int, error) {
-	return int(obj.ID), nil
-}
-
-// UserID is the resolver for the userId field.
-func (r *addressResolver) UserID(ctx context.Context, obj *models.Address) (int, error) {
-	return int(obj.UserID), nil
-}
-
-// Label converts database string to GraphQL enum
-// This is called automatically by GraphQL when the label field is requested
-func (r *addressResolver) Label(ctx context.Context, obj *models.Address) (*model.AddressLabel, error) {
-	if obj.Label == "" {
-		return nil, nil
+// CreateAddress creates a new address
+func (r *mutationResolver) CreateAddress(ctx context.Context, input model.CreateAddressInput) (*model.Address, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
-	label := model.AddressLabel(obj.Label)
-	return &label, nil
-}
 
-// PreferredTimeSlot is the resolver for the preferredTimeSlot field.
-func (r *addressResolver) PreferredTimeSlot(ctx context.Context, obj *models.Address) (*model.TimeOfDay, error) {
-	slot := obj.GetPreferredTimeSlot()
-	timeOfDay := model.TimeOfDay(slot)
-	return &timeOfDay, nil
-}
-
-// CreateAddress is the resolver for the createAddress field.
-func (r *mutationResolver) CreateAddress(ctx context.Context, input model.CreateAddressInput) (*models.Address, error) {
-	authUser, err := middlewares.RequireAuth(ctx)
+	// Create location
+	location, err := valueobjects.NewLocation(input.Location.Latitude, input.Location.Longitude)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, pkgErrors.ErrInvalidInput("location", err.Error()))
 	}
 
-	addressInput := address.CreateAddressInput{
-		UserID:       authUser.UserID,
-		Label:        addressLabelToString(input.Label),
-		AddressLine1: input.AddressLine1,
-		AddressLine2: ptrToString(input.AddressLine2),
-		Landmark:     ptrToString(input.Landmark),
-		City:         input.City,
-		State:        input.State,
-		Country:      ptrToString(input.Country),
-		PostalCode:   input.PostalCode,
-		Latitude:     input.Latitude,
-		Longitude:    input.Longitude,
-		ContactName:  ptrToString(input.ContactName),
-		ContactPhone: ptrToString(input.ContactPhone),
-		IsDefault:    ptrToBool(input.IsDefault),
+	// Handle label - it's a pointer because it has a default value in GraphQL
+	label := model.AddressLabelOther // default
+	if input.Label != nil {
+		label = *input.Label
 	}
 
-	addr, err := r.Resolver.AddressService.CreateAddress(addressInput)
+	// Create address aggregate
+	address, err := aggregates.NewAddress(
+		uuid.New().String(),
+		userID,
+		addressLabelToDomain(label), // Now passing the dereferenced value
+		input.AddressLine1,
+		stringValue(input.AddressLine2),
+		stringValue(input.Landmark),
+		input.City,
+		input.State,
+		stringValue(input.Country),
+		stringValue(input.PostalCode),
+		location,
+		stringValue(input.ContactName),
+		stringValue(input.ContactPhone),
+	)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
 	}
 
-	return addr, nil
+	// Set as default if requested
+	if boolValue(input.SetAsDefault) {
+		address.SetAsDefault()
+	}
+
+	// Save address
+	err = r.Resolver.addressService.CreateAddress(ctx, userID, address)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	return addressToGraphQL(address), nil
 }
 
-// UpdateAddress is the resolver for the updateAddress field.
-func (r *mutationResolver) UpdateAddress(ctx context.Context, id int, input model.UpdateAddressInput) (*models.Address, error) {
-	authUser, err := middlewares.RequireAuth(ctx)
+// UpdateAddress updates an existing address
+func (r *mutationResolver) UpdateAddress(ctx context.Context, input model.UpdateAddressInput) (*model.Address, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
+	}
+
+	// Fetch address
+	address, err := r.Resolver.addressService.GetAddress(ctx, input.ID)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
 	}
 
-	updateInput := address.UpdateAddressInput{
-		Label:        stringPtr(enumToString(input.Label)),
-		AddressLine1: input.AddressLine1,
-		AddressLine2: input.AddressLine2,
-		Landmark:     input.Landmark,
-		City:         input.City,
-		State:        input.State,
-		PostalCode:   input.PostalCode,
-		Latitude:     input.Latitude,
-		Longitude:    input.Longitude,
-		ContactName:  input.ContactName,
-		ContactPhone: input.ContactPhone,
-		IsActive:     input.IsActive,
+	// Verify ownership
+	if address.UserID() != userID {
+		return nil, pkgErrors.ErrForbidden("You don't have permission to update this address")
 	}
 
-	addr, err := r.Resolver.AddressService.UpdateAddress(uint(id), authUser.UserID, updateInput)
+	// Create location if provided
+	var location *valueobjects.Location
+	if input.Location != nil {
+		location, err = valueobjects.NewLocation(input.Location.Latitude, input.Location.Longitude)
+		if err != nil {
+			return nil, pkgErrors.ErrInvalidInput("location", err.Error())
+		}
+	} else {
+		location = address.Location()
+	}
+
+	// Get values with fallback to existing
+	label := address.Label()
+	if input.Label != nil {
+		label = addressLabelToDomain(*input.Label)
+	}
+
+	addressLine1 := address.AddressLine1()
+	if input.AddressLine1 != nil {
+		addressLine1 = *input.AddressLine1
+	}
+
+	city := address.City()
+	if input.City != nil {
+		city = *input.City
+	}
+
+	state := address.State()
+	if input.State != nil {
+		state = *input.State
+	}
+
+	postalCode := address.PostalCode()
+	if input.PostalCode != nil {
+		postalCode = stringValue(input.PostalCode)
+	}
+
+	// Update address
+	err = address.Update(
+		label,
+		addressLine1,
+		stringValue(input.AddressLine2),
+		stringValue(input.Landmark),
+		city,
+		state,
+		postalCode,
+		location,
+		stringValue(input.ContactName),
+		stringValue(input.ContactPhone),
+	)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
 	}
 
-	return addr, nil
+	// Save changes
+	updatedAddress, err := r.Resolver.addressService.UpdateAddress(ctx, userID, address)
+
+	return addressToGraphQL(updatedAddress), nil
 }
 
-// DeleteAddress is the resolver for the deleteAddress field.
-func (r *mutationResolver) DeleteAddress(ctx context.Context, id int) (*model.SuccessResponse, error) {
-	authUser, err := middlewares.RequireAuth(ctx)
+// DeleteAddress soft deletes an address
+func (r *mutationResolver) DeleteAddress(ctx context.Context, id string) (bool, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return false, pkgErrors.ErrUnauthorized("Not authenticated")
+	}
+
+	// Delete address
+	err := r.Resolver.addressService.DeleteAddress(ctx, userID, id)
 	if err != nil {
-		return nil, err
+		return false, handleError(ctx, err)
 	}
 
-	if err := r.Resolver.AddressService.DeleteAddress(uint(id), authUser.UserID); err != nil {
-		return &model.SuccessResponse{
-			Success: false,
-			Message: stringPtr("Failed to delete address"),
-		}, err
+	return true, nil
+}
+
+// SetDefaultAddress sets an address as default
+func (r *mutationResolver) SetDefaultAddress(ctx context.Context, id string) (*model.Address, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	return &model.SuccessResponse{
-		Success: true,
-		Message: stringPtr("Address deleted successfully"),
+	// Use service - it handles unset, update, and cache management
+	updatedAddress, err := r.Resolver.addressService.SetDefaultAddress(ctx, userID, id)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	return addressToGraphQL(updatedAddress), nil
+}
+
+// VerifyAddress marks an address location as verified
+func (r *mutationResolver) VerifyAddress(ctx context.Context, id string) (*model.Address, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
+	}
+
+	updatedAddress, err := r.Resolver.addressService.VerifyAddress(ctx, userID, id)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	return addressToGraphQL(updatedAddress), nil
+}
+
+// Address returns address by ID
+func (r *queryResolver) Address(ctx context.Context, id string) (*model.Address, error) {
+	address, err := r.Resolver.addressService.GetAddress(ctx, id)
+	if err != nil {
+		if err == domain.ErrNotFound {
+			return nil, nil
+		}
+		return nil, handleError(ctx, err)
+	}
+
+	return addressToGraphQL(address), nil
+}
+
+// MyAddresses returns all addresses for current user
+func (r *queryResolver) MyAddresses(ctx context.Context) ([]*model.Address, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
+	}
+
+	addresses, err := r.Resolver.addressService.GetUserAddresses(ctx, userID)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	result := make([]*model.Address, len(addresses))
+	for i, addr := range addresses {
+		result[i] = addressToGraphQL(addr)
+	}
+
+	return result, nil
+}
+
+// MyDefaultAddress returns the default address for current user
+func (r *queryResolver) MyDefaultAddress(ctx context.Context) (*model.Address, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
+	}
+
+	// Get all addresses and find the default one
+	addresses, err := r.Resolver.addressService.GetUserAddresses(ctx, userID)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	// Find default address
+	for _, addr := range addresses {
+		if addr.IsDefault() {
+			return addressToGraphQL(addr), nil
+		}
+	}
+
+	// No default address found
+	return nil, nil
+}
+
+// SuggestedAddresses returns smart address suggestions
+func (r *queryResolver) SuggestedAddresses(ctx context.Context, limit *int) ([]*model.AddressSuggestion, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
+	}
+
+	l := 3 // Default limit
+	if limit != nil {
+		l = *limit
+	}
+
+	addresses, err := r.Resolver.addressService.GetSuggestedAddresses(ctx, userID, l)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	// Convert to AddressSuggestion type
+	result := make([]*model.AddressSuggestion, len(addresses))
+	for i, addr := range addresses {
+		result[i] = &model.AddressSuggestion{
+			Address: addressToGraphQL(addr),
+			Score:   r.Resolver.addressService.CalculateConfidence(addr), // Simple scoring based on usage
+			Reason:  r.Resolver.addressService.GenerateSuggestionReason(addr),
+		}
+	}
+
+	return result, nil
+}
+
+// NearestAddresses returns addresses near a location
+func (r *queryResolver) NearestAddresses(ctx context.Context, latitude float64, longitude float64, limit *int) ([]*model.Address, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
+	}
+
+	l := 5 // Default limit
+	if limit != nil {
+		l = *limit
+	}
+
+	addresses, err := r.Resolver.addressService.FindNearestAddresses(ctx, userID, latitude, longitude, l)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	result := make([]*model.Address, len(addresses))
+	for i, addr := range addresses {
+		result[i] = addressToGraphQL(addr)
+	}
+
+	return result, nil
+}
+
+// SearchAddresses searches user's addresses
+func (r *queryResolver) SearchAddresses(ctx context.Context, input model.AddressSearchInput) (*model.AddressConnection, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
+	}
+
+	// Extract search parameters with defaults
+	query := ""
+	if input.Query != nil {
+		query = *input.Query
+	}
+
+	l := 20
+	if input.Limit != nil {
+		l = *input.Limit
+	}
+
+	o := 0
+	if input.Offset != nil {
+		o = *input.Offset
+	}
+
+	addresses, total, err := r.Resolver.addressService.SearchAddresses(ctx, userID, query, l, o)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	edges := make([]*model.AddressEdge, len(addresses))
+	for i, addr := range addresses {
+		edges[i] = &model.AddressEdge{
+			Cursor: fmt.Sprintf("%d", o+i),
+			Node:   addressToGraphQL(addr),
+		}
+	}
+
+	return &model.AddressConnection{
+		Edges: edges,
+		PageInfo: &model.PageInfo{
+			HasNextPage:     int64(o+l) < total,
+			HasPreviousPage: o > 0,
+			Total:           int(total),
+		},
+		TotalCount: int(total),
 	}, nil
 }
 
-// SetDefaultAddress is the resolver for the setDefaultAddress field.
-func (r *mutationResolver) SetDefaultAddress(ctx context.Context, id int) (*models.Address, error) {
-	authUser, err := middlewares.RequireAuth(ctx)
-	if err != nil {
-		return nil, err
+// AddressStats returns address statistics
+func (r *queryResolver) AddressStats(ctx context.Context) (*model.AddressStats, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
 	}
 
-	addr, err := r.Resolver.AddressService.SetDefaultAddress(uint(id), authUser.UserID)
+	stats, err := r.Resolver.addressService.GetAddressStats(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, handleError(ctx, err)
 	}
 
-	return addr, nil
+	return &model.AddressStats{
+		TotalAddresses:  int(stats.TotalAddresses),
+		MostUsedAddress: addressToGraphQL(stats.MostUsedAddress),
+		DefaultAddress:  addressToGraphQL(stats.DefaultAddress),
+		RecentAddresses: addressesToGraphQL(stats.RecentAddresses),
+	}, nil
 }
-
-// VerifyAddress is the resolver for the verifyAddress field.
-func (r *mutationResolver) VerifyAddress(ctx context.Context, id int) (*models.Address, error) {
-	authUser, err := middlewares.RequireAuth(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	addr, err := r.Resolver.AddressService.VerifyAddress(uint(id), authUser.UserID)
-	if err != nil {
-		return nil, err
-	}
-
-	return addr, nil
-}
-
-// Queries
-// MyAddresses is the resolver for the myAddresses field.
-func (r *queryResolver) MyAddresses(ctx context.Context) ([]*models.Address, error) {
-	authUser, err := middlewares.RequireAuth(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	addresses, err := r.Resolver.AddressService.GetUserAddresses(authUser.UserID)
-	if err != nil {
-		return nil, err
-	}
-
-	return addresses, nil
-}
-
-// Address is the resolver for the address field.
-func (r *queryResolver) Address(ctx context.Context, id int) (*models.Address, error) {
-	authUser, err := middlewares.RequireAuth(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	address, err := r.Resolver.AddressService.GetAddressByID(uint(id))
-	if err != nil {
-		return nil, err
-	}
-
-	// Check authorization
-	if address.UserID != authUser.UserID {
-		return nil, middlewares.ErrUnauthorized
-	}
-
-	return address, nil
-}
-
-// DefaultAddress is the resolver for the defaultAddress field.
-func (r *queryResolver) DefaultAddress(ctx context.Context) (*models.Address, error) {
-	authUser, err := middlewares.RequireAuth(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	address, err := r.Resolver.AddressService.GetDefaultAddress(authUser.UserID)
-	if err != nil {
-		return nil, err
-	}
-
-	return address, nil
-}
-
-// SuggestedAddresses is the resolver for the suggestedAddresses field.
-func (r *queryResolver) SuggestedAddresses(ctx context.Context, timeOfDay *model.TimeOfDay) ([]*models.Address, error) {
-	authUser, err := middlewares.RequireAuth(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	timeSlot := "MORNING"
-	if timeOfDay != nil {
-		timeSlot = string(*timeOfDay)
-	}
-
-	addresses, err := r.Resolver.AddressService.GetSuggestedAddresses(authUser.UserID, timeSlot)
-	if err != nil {
-		return nil, err
-	}
-
-	return addresses, nil
-}
-
-// Address returns generated.AddressResolver implementation.
-func (r *Resolver) Address() generated.AddressResolver { return &addressResolver{r} }
-
-type addressResolver struct{ *Resolver }
-
-// !!! WARNING !!!
-// The code below was going to be deleted when updating resolvers. It has been copied here so you have
-// one last chance to move it out of harms way if you want. There are two reasons this happens:
-//  - When renaming or deleting a resolver the old code will be put in here. You can safely delete
-//    it when you're done.
-//  - You have helper methods in this file. Move them out to keep these resolver files clean.
-/*
-	func (r *addressResolver) FullAddress(ctx context.Context, obj *models.Address) (string, error) {
-	return obj.GetFullAddress(), nil
-}
-*/

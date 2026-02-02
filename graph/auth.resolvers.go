@@ -9,218 +9,284 @@ import (
 	"context"
 	"fmt"
 	"time"
-	"turtle/db"
 	"turtle/graph/model"
-	"turtle/middlewares"
-	"turtle/models"
+	"turtle/internal/application/usecases"
+	"turtle/internal/domain"
+	"turtle/internal/domain/aggregates"
+	pkgErrors "turtle/pkg/errors"
 	"turtle/pkg/jwt"
-	"turtle/services/auth"
-	"turtle/services/otp"
 )
 
-// SocialLogin is the resolver for the socialLogin field.
-func (r *mutationResolver) SocialLogin(ctx context.Context, provider model.Provider, providerToken string) (*model.AuthPayload, error) {
-	var user *models.User
-	var err error
-
-	switch provider {
-	case model.ProviderApple:
-		sub, email, verifyErr := auth.VerifyAppleToken(providerToken)
-		if verifyErr != nil {
-			return nil, fmt.Errorf("apple verification failed: %w", verifyErr)
-		}
-		user, err = auth.SocialLogin("APPLE", sub, email)
-
-	case model.ProviderGoogle:
-		sub, email, verifyErr := auth.VerifyGoogleToken(providerToken)
-		if verifyErr != nil {
-			return nil, fmt.Errorf("google verification failed: %w", verifyErr)
-		}
-		user, err = auth.SocialLogin("GOOGLE", sub, email)
-
-	default:
-		return nil, ErrInvalidProvider
+// SocialLogin handles Google/Apple login for customers
+func (r *mutationResolver) SocialLogin(ctx context.Context, input model.SocialLoginInput) (*model.AuthResponse, error) {
+	// Convert GraphQL input to service input
+	serviceInput := usecases.SocialLoginInput{
+		Provider:   string(input.Provider),
+		ProviderID: input.ProviderID,
+		Email:      input.Email,
+		FirstName:  input.FirstName,
+		LastName:   input.LastName,
+		ProfilePic: stringValue(input.ProfilePic),
+		DeviceType: string(input.DeviceType),
+		DeviceInfo: input.DeviceInfo,
 	}
 
+	// Call authentication service
+	output, err := r.Resolver.authService.SocialLogin(ctx, serviceInput)
 	if err != nil {
-		return nil, fmt.Errorf("social login failed: %w", err)
+		return nil, handleError(ctx, err)
 	}
 
-	return r.Resolver.createAuthSession(user, DeviceMobile)
-}
-
-// SendOtp is the resolver for the sendOtp field.
-func (r *mutationResolver) SendOtp(ctx context.Context, target string, purpose string) (bool, error) {
-	if !IsValidPurpose(purpose) {
-		return false, ErrInvalidPurpose
-	}
-
-	exceeded, err := otp.CheckRateLimit(target)
+	// Fetch full user details
+	user, err := r.Resolver.userService.GetUser(ctx, output.UserID)
 	if err != nil {
-		return false, fmt.Errorf("rate limit check failed: %w", err)
-	}
-	if exceeded {
-		return false, ErrRateLimitExceeded
+		return nil, handleError(ctx, err)
 	}
 
-	code := otp.Generate()
-
-	if err := otp.SaveOTP(target, code, 5*time.Minute); err != nil {
-		return false, fmt.Errorf("failed to save OTP: %w", err)
-	}
-
-	if err := otp.IncrementRateLimit(target); err != nil {
-		return false, fmt.Errorf("failed to update rate limit: %w", err)
-	}
-
-	switch purpose {
-	case PurposeCustomerLogin:
-		if err := otp.SendEmail(target, code); err != nil {
-			return false, fmt.Errorf("failed to send email: %w", err)
-		}
-	case PurposeCaptainLogin:
-		if err := otp.SendSMS(target, code); err != nil {
-			return false, fmt.Errorf("failed to send SMS: %w", err)
-		}
-	}
-
-	return true, nil
-}
-
-// VerifyOtp is the resolver for the verifyOtp field.
-func (r *mutationResolver) VerifyOtp(ctx context.Context, target string, code string, purpose string) (*model.AuthPayload, error) {
-	if !IsValidPurpose(purpose) {
-		return nil, ErrInvalidPurpose
-	}
-
-	valid, err := otp.VerifyOTP(target, code)
-	if err != nil {
-		if err == otp.ErrMaxAttemptsReached {
-			return nil, ErrMaxAttemptsReached
-		}
-		return nil, ErrOTPNotFound
-	}
-
-	if !valid {
-		otp.IncrementFailedAttempts(target)
-		return nil, ErrInvalidOTP
-	}
-
-	if err := otp.DeleteOTP(target); err != nil {
-		fmt.Printf("Warning: failed to delete OTP for %s: %v\n", target, err)
-	}
-
-	var user models.User
-	role := RoleCustomer
-
-	if purpose == PurposeCaptainLogin {
-		role = RoleCaptain
-		if err := db.DB.Where("phone = ?", target).FirstOrCreate(&user, models.User{
-			Phone:         stringPtr(target),
-			Role:          role,
-			PhoneVerified: true,
-			Status:        "ACTIVE",
-		}).Error; err != nil {
-			return nil, fmt.Errorf("failed to create captain: %w", err)
-		}
-	} else {
-		if err := db.DB.Where("email = ?", target).FirstOrCreate(&user, models.User{
-			Email:         stringPtr(target),
-			Role:          role,
-			EmailVerified: true,
-			Status:        "ACTIVE",
-		}).Error; err != nil {
-			return nil, fmt.Errorf("failed to create customer: %w", err)
-		}
-	}
-
-	return r.Resolver.createAuthSession(&user, DeviceMobile)
-}
-
-// RefreshToken is the resolver for the refreshToken field.
-func (r *mutationResolver) RefreshToken(ctx context.Context, refresh string, device model.DeviceType) (*model.AuthPayload, error) {
-	deviceStr := string(device)
-
-	if !IsValidDevice(deviceStr) {
-		return nil, ErrInvalidDevice
-	}
-
-	var session models.RefreshToken
-	if err := db.DB.Where("token = ? AND expires_at > ?", refresh, time.Now()).First(&session).Error; err != nil {
-		return nil, ErrInvalidRefresh
-	}
-
-	var user models.User
-	if err := db.DB.First(&user, session.UserID).Error; err != nil {
-		return nil, ErrUserNotFound
-	}
-
-	tx := db.DB.Begin()
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	access, newRefresh := jwt.GeneratePair(user.ID, user.Role, deviceStr)
-
-	newSession := &models.RefreshToken{
-		UserID:    user.ID,
-		Token:     newRefresh,
-		Device:    deviceStr,
-		ExpiresAt: time.Now().Add(RefreshTokenTTL),
-	}
-
-	if err := tx.Create(newSession).Error; err != nil {
-		tx.Rollback()
-		return nil, fmt.Errorf("failed to create session: %w", err)
-	}
-
-	if err := tx.Delete(&session).Error; err != nil {
-		tx.Rollback()
-		return nil, fmt.Errorf("failed to rotate token: %w", err)
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		return nil, fmt.Errorf("transaction failed: %w", err)
-	}
-
-	return &model.AuthPayload{
-		AccessToken:  access,
-		RefreshToken: newRefresh,
-		UserID:       int(user.ID),
-		Role:         user.Role,
+	// Convert to GraphQL response
+	return &model.AuthResponse{
+		Tokens: &model.AuthToken{
+			AccessToken:  output.AccessToken,
+			RefreshToken: output.RefreshToken,
+			ExpiresAt:    output.ExpiresAt,
+			TokenType:    "Bearer",
+		},
+		User:       userToGraphQL(user),
+		IsNewUser:  output.IsNewUser,
+		NeedsPhone: boolPtr(output.NeedsPhone),
 	}, nil
 }
 
-// Logout is the resolver for the logout field.
-func (r *mutationResolver) Logout(ctx context.Context, refreshToken string) (bool, error) {
-	user, err := middlewares.RequireAuth(ctx)
+// RequestOtp sends OTP to phone number
+func (r *mutationResolver) RequestOtp(ctx context.Context, input model.RequestOTPInput) (*model.OTPResponse, error) {
+	serviceInput := usecases.SendOTPInput{
+		Phone:   input.Phone,
+		Purpose: string(input.Purpose),
+	}
+
+	err := r.Resolver.authService.SendOTP(ctx, serviceInput)
 	if err != nil {
-		// Allow logout even without auth
-		result := db.DB.Where("token = ?", refreshToken).Delete(&models.RefreshToken{})
-		if result.Error != nil {
-			return false, fmt.Errorf("logout failed: %w", result.Error)
-		}
-		return true, nil
+		return nil, handleError(ctx, err)
 	}
 
-	fmt.Printf("User %d is logging out\n", user.UserID)
+	return &model.OTPResponse{
+		Success:   true,
+		Message:   "OTP sent successfully",
+		Target:    input.Phone,
+		ExpiresAt: time.Now().Add(15 * time.Minute),
+	}, nil
+}
 
-	result := db.DB.Where("token = ? AND user_id = ?", refreshToken, user.UserID).Delete(&models.RefreshToken{})
-
-	if result.Error != nil {
-		return false, fmt.Errorf("logout failed: %w", result.Error)
+// VerifyOtp is the resolver for the verifyOTP field.
+func (r *mutationResolver) VerifyOtp(ctx context.Context, input model.VerifyOTPInput) (*model.AuthResponse, error) {
+	serviceInput := usecases.VerifyOTPInput{
+		Phone:      input.Phone,
+		Code:       input.Code,
+		Purpose:    string(input.Purpose),
+		DeviceType: string(input.DeviceType),
+		DeviceInfo: input.DeviceInfo,
 	}
 
-	if result.RowsAffected == 0 {
-		return false, ErrInvalidRefresh
+	output, err := r.Resolver.authService.VerifyOTPAndLogin(ctx, serviceInput)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	// Fetch full user details
+	user, err := r.Resolver.userService.GetUser(ctx, output.UserID)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	// Check if KYC needed
+	needsKYC := false
+	if user.IsCaptain() && user.CaptainProfile() != nil {
+		needsKYC = user.CaptainProfile().KYCStatus() != aggregates.KYCVerified
+	}
+
+	return &model.AuthResponse{
+		Tokens: &model.AuthToken{
+			AccessToken:  output.AccessToken,
+			RefreshToken: output.RefreshToken,
+			ExpiresAt:    output.ExpiresAt,
+			TokenType:    "Bearer",
+		},
+		User:      userToGraphQL(user),
+		IsNewUser: output.IsNewUser,
+		NeedsKyc:  boolPtr(needsKYC),
+	}, nil
+}
+
+// RefreshToken refreshes access token
+func (r *mutationResolver) RefreshToken(ctx context.Context, input model.RefreshTokenInput) (*model.AuthToken, error) {
+	tokenPair, err := r.Resolver.authService.RefreshAccessToken(ctx, input.RefreshToken)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	return &model.AuthToken{
+		AccessToken:  tokenPair.AccessToken,
+		RefreshToken: tokenPair.RefreshToken,
+		ExpiresAt:    tokenPair.ExpiresAt,
+		TokenType:    "Bearer",
+	}, nil
+}
+
+// Logout revokes current session
+func (r *mutationResolver) Logout(ctx context.Context) (bool, error) {
+	// Get refresh token from context (set by auth middleware)
+	refreshToken, err := getRefreshTokenFromContext(ctx)
+	if err != nil {
+		return false, pkgErrors.ErrUnauthorized("No active session")
+	}
+
+	logErr := r.Resolver.authService.Logout(ctx, refreshToken)
+	if logErr != nil {
+		return false, handleError(ctx, logErr)
 	}
 
 	return true, nil
 }
 
-// Health is the resolver for the health field.
-func (r *queryResolver) Health(ctx context.Context) (string, error) {
-	return "ok", nil
+// LogoutAll revokes all sessions for user
+func (r *mutationResolver) LogoutAll(ctx context.Context) (bool, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return false, pkgErrors.ErrUnauthorized("Not authenticated")
+	}
+
+	err := r.Resolver.authService.RevokeAllSessions(ctx, userID)
+	if err != nil {
+		return false, handleError(ctx, err)
+	}
+
+	return true, nil
+}
+
+// AddPhone adds phone number to customer account
+func (r *mutationResolver) AddPhone(ctx context.Context, input model.AddPhoneInput) (*model.OTPResponse, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
+	}
+
+	serviceInput := usecases.AddPhoneNumberInput{
+		UserID: userID,
+		Phone:  input.Phone,
+	}
+
+	err := r.Resolver.authService.AddPhoneNumber(ctx, serviceInput)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	return &model.OTPResponse{
+		Success:   true,
+		Message:   "Verification OTP sent to phone",
+		Target:    input.Phone,
+		ExpiresAt: time.Now().Add(15 * time.Minute),
+	}, nil
+}
+
+// VerifyPhone verifies added phone number
+func (r *mutationResolver) VerifyPhone(ctx context.Context, input model.VerifyPhoneInput) (bool, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return false, pkgErrors.ErrUnauthorized("Not authenticated")
+	}
+
+	serviceInput := usecases.VerifyPhoneInput{
+		UserID: userID,
+		Phone:  input.Phone,
+		Code:   input.Code,
+	}
+
+	err := r.Resolver.authService.VerifyPhone(ctx, serviceInput)
+	if err != nil {
+		return false, handleError(ctx, err)
+	}
+
+	return true, nil
+}
+
+// BecomeCaptain converts customer to captain
+func (r *mutationResolver) BecomeCaptain(ctx context.Context, input model.BecomeCaptainInput) (*model.User, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
+	}
+
+	serviceInput := usecases.BecomeCaptainInput{
+		UserID: userID,
+		Phone:  stringValue(input.Phone),
+	}
+
+	output, err := r.Resolver.authService.BecomeCaptain(ctx, serviceInput)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	if !output.Success {
+		return nil, fmt.Errorf("%s", output.Message)
+	}
+
+	// Fetch updated user
+	user, err := r.Resolver.userService.GetUser(ctx, userID)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	return userToGraphQL(user), nil
+}
+
+// Me returns current authenticated user
+func (r *queryResolver) Me(ctx context.Context) (*model.User, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, nil
+	}
+
+	user, err := r.Resolver.userService.GetUser(ctx, userID)
+	if err != nil {
+		if err == domain.ErrNotFound {
+			return nil, nil
+		}
+		return nil, handleError(ctx, err)
+	}
+
+	return userToGraphQL(user), nil
+}
+
+// MySessions returns all active sessions
+func (r *queryResolver) MySessions(ctx context.Context) ([]*model.Session, error) {
+	userID, idErr := getUserIDFromContext(ctx)
+	if idErr != nil {
+		return nil, pkgErrors.ErrUnauthorized("Not authenticated")
+	}
+
+	tokens, err := r.Resolver.authService.GetActiveSessions(ctx, userID)
+	if err != nil {
+		return nil, handleError(ctx, err)
+	}
+
+	sessions := make([]*model.Session, len(tokens))
+	for i, token := range tokens {
+		sessions[i] = &model.Session{
+			ID:         fmt.Sprintf("%d", token.ID),
+			Device:     model.DeviceType(token.Device),
+			DeviceInfo: token.DeviceInfo,
+			LastUsedAt: TimeValue(token.LastUsedAt),
+			CreatedAt:  token.CreatedAt,
+			ExpiresAt:  token.ExpiresAt,
+			IsActive:   !token.IsRevoked && time.Now().Before(token.ExpiresAt),
+		}
+	}
+
+	return sessions, nil
+}
+
+// VerifyToken checks if token is valid
+func (r *queryResolver) VerifyToken(ctx context.Context, token string) (bool, error) {
+	_, err := jwt.VerifyToken(token)
+	return err == nil, nil
 }

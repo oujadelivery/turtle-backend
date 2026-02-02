@@ -1,119 +1,371 @@
-extend type Query {
-  # Get all addresses for current user
-  myAddresses: [Address!]!
+# ============================================================================
+# ADDRESS
+# Address management with smart suggestions and usage analytics
+# ============================================================================
 
-  # Get address by ID
-  address(id: Int!): Address
+# =========================
+# ADDRESS TYPES
+# =========================
 
-  # Get default address
+"""
+Address represents a saved delivery address
+Includes ML-ready usage analytics for smart suggestions
+"""
+type Address {
+  """Unique address ID"""
+  id: ID!
+  
+  """User who owns this address"""
+  userID: ID!
+  
+  # Basic Information
+  """Address label (HOME, WORK, OTHER)"""
+  label: AddressLabel!
+  
+  """Primary address line"""
+  addressLine1: String!
+  
+  """Secondary address line"""
+  addressLine2: String
+  
+  """Landmark for easier location"""
+  landmark: String
+  
+  """City"""
+  city: String!
+  
+  """State/Province"""
+  state: String!
+  
+  """Country"""
+  country: String!
+  
+  """Postal/ZIP code"""
+  postalCode: String
+  
+  # Geographic Location
+  """GPS coordinates"""
+  location: Location!
+  
+  # Contact at Address
+  """Contact person name at this address"""
+  contactName: String
+  
+  """Contact phone at this address"""
+  contactPhone: String
+  
+  # Status Flags
+  """Is this the default address?"""
+  isDefault: Boolean!
+  
+  """Is this address active?"""
+  isActive: Boolean!
+  
+  """Has GPS location been verified?"""
+  isVerified: Boolean!
+  
+  # Usage Analytics
+  """Total times this address has been used"""
+  usageCount: Int!
+  
+  """Last time this address was used"""
+  lastUsedAt: Time
+  
+  """Usage score (0-100) for ranking"""
+  usageScore: Float!
+  
+  # Time-based Analytics
+  """Morning usage count (6 AM - 12 PM)"""
+  morningUsageCount: Int!
+  
+  """Afternoon usage count (12 PM - 6 PM)"""
+  afternoonUsageCount: Int!
+  
+  """Evening usage count (6 PM - 12 AM)"""
+  eveningUsageCount: Int!
+  
+  """Night usage count (12 AM - 6 AM)"""
+  nightUsageCount: Int!
+  
+  # Day-based Analytics
+  """Weekday usage count"""
+  weekdayUsageCount: Int!
+  
+  """Weekend usage count"""
+  weekendUsageCount: Int!
+  
+  # Insights
+  """Is this likely a home address? (based on usage patterns)"""
+  isLikelyHome: Boolean!
+  
+  """Is this likely a work address? (based on usage patterns)"""
+  isLikelyWork: Boolean!
+  
+  """Preferred time slot for this address"""
+  preferredTimeSlot: TimeOfDay!
+  
+  # Formatted Output
+  """Full formatted address"""
+  fullAddress: String!
+  
+  """Short address for display"""
+  shortAddress: String!
+  
+  # Timestamps
+  """Address creation time"""
+  createdAt: Time!
+  
+  """Last update time"""
+  updatedAt: Time!
+}
+
+"""
+AddressConnection for paginated address lists
+"""
+type AddressConnection {
+  edges: [AddressEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+"""
+AddressEdge wraps address with cursor
+"""
+type AddressEdge {
+  cursor: String!
+  node: Address!
+}
+
+"""
+AddressSuggestion represents a smart address suggestion
+"""
+type AddressSuggestion {
+  """The suggested address"""
+  address: Address!
+  
+  """Suggestion score (0-100)"""
+  score: Float!
+  
+  """Reason for suggestion"""
+  reason: String!
+}
+
+"""
+AddressStats provides address usage statistics
+"""
+type AddressStats {
+  """Total addresses"""
+  totalAddresses: Int!
+  
+  """Default address"""
   defaultAddress: Address
-
-  # Get suggested addresses (based on usage patterns)
-  suggestedAddresses(timeOfDay: TimeOfDay): [Address!]!
+  
+  """Most used address"""
+  mostUsedAddress: Address
+  
+  """Recently used addresses"""
+  recentAddresses: [Address!]!
 }
 
-extend type Mutation {
-  # Create new address
-  createAddress(input: CreateAddressInput!): Address!
+# =========================
+# ADDRESS ENUMS
+# =========================
 
-  # Update existing address
-  updateAddress(id: Int!, input: UpdateAddressInput!): Address!
-
-  # Delete address
-  deleteAddress(id: Int!): SuccessResponse!
-
-  # Set default address
-  setDefaultAddress(id: Int!): Address!
-
-  # Verify address coordinates
-  verifyAddress(id: Int!): Address!
-}
-
-enum TimeOfDay {
-  MORNING
-  AFTERNOON
-  EVENING
-  NIGHT
-}
-
+"""
+Address labels
+"""
 enum AddressLabel {
   HOME
   WORK
   OTHER
 }
 
-type Address {
-  id: Int!
-  userId: Int!
-
-  label: AddressLabel
-  addressLine1: String!
-  addressLine2: String
-  landmark: String
-  city: String!
-  state: String!
-  country: String!
-  postalCode: String!
-
-  latitude: Float!
-  longitude: Float!
-
-  contactName: String
-  contactPhone: String
-
-  isDefault: Boolean!
-  usageCount: Int!
-  lastUsedAt: Time
-
-  # Analytics
-  preferredTimeSlot: TimeOfDay
-  morningUsageCount: Int!
-  afternoonUsageCount: Int!
-  eveningUsageCount: Int!
-  nightUsageCount: Int!
-  weekdayUsageCount: Int!
-  weekendUsageCount: Int!
-
-  isActive: Boolean!
-  isVerified: Boolean!
-
-  createdAt: Time!
-  updatedAt: Time!
+"""
+Time of day for analytics
+"""
+enum TimeOfDay {
+  MORNING    # 6 AM - 12 PM
+  AFTERNOON  # 12 PM - 6 PM
+  EVENING    # 6 PM - 12 AM
+  NIGHT      # 12 AM - 6 AM
 }
 
+# =========================
+# ADDRESS INPUTS
+# =========================
+
+"""
+Input for creating a new address
+"""
 input CreateAddressInput {
-  label: AddressLabel
+  """Address label"""
+  label: AddressLabel = OTHER
+  
+  """Primary address line"""
   addressLine1: String!
+  
+  """Secondary address line"""
   addressLine2: String
+  
+  """Landmark"""
   landmark: String
+  
+  """City"""
   city: String!
+  
+  """State/Province"""
   state: String!
+  
+  """Country"""
   country: String = "India"
-  postalCode: String!
-
-  latitude: Float!
-  longitude: Float!
-
+  
+  """Postal/ZIP code"""
+  postalCode: String
+  
+  """GPS location"""
+  location: LocationInput!
+  
+  """Contact person name"""
   contactName: String
+  
+  """Contact phone"""
   contactPhone: String
-
-  isDefault: Boolean = false
+  
+  """Set as default address"""
+  setAsDefault: Boolean = false
 }
 
+"""
+Input for updating an address
+"""
 input UpdateAddressInput {
+  """Address ID to update"""
+  id: ID!
+  
+  """Address label"""
   label: AddressLabel
+  
+  """Primary address line"""
   addressLine1: String
+  
+  """Secondary address line"""
   addressLine2: String
+  
+  """Landmark"""
   landmark: String
+  
+  """City"""
   city: String
+  
+  """State/Province"""
   state: String
+  
+  """Postal/ZIP code"""
   postalCode: String
-
-  latitude: Float
-  longitude: Float
-
+  
+  """GPS location"""
+  location: LocationInput
+  
+  """Contact person name"""
   contactName: String
+  
+  """Contact phone"""
   contactPhone: String
+}
 
-  isActive: Boolean
+"""
+Input for searching addresses
+"""
+input AddressSearchInput {
+  """Search query (city, state, postal code)"""
+  query: String
+  
+  """Results per page"""
+  limit: Int = 20
+  
+  """Page offset"""
+  offset: Int = 0
+}
+
+# =========================
+# ADDRESS MUTATIONS
+# =========================
+
+extend type Mutation {
+  """
+  Create a new address
+  Requires authentication
+  """
+  createAddress(input: CreateAddressInput!): Address! @auth
+  
+  """
+  Update an existing address
+  Requires authentication
+  """
+  updateAddress(input: UpdateAddressInput!): Address! @auth
+  
+  """
+  Delete an address
+  Soft deletes the address
+  """
+  deleteAddress(id: ID!): Boolean! @auth
+  
+  """
+  Set an address as default
+  Unsets previous default
+  """
+  setDefaultAddress(id: ID!): Address! @auth
+  
+  """
+  Mark address location as verified
+  """
+  verifyAddress(id: ID!): Address! @auth
+}
+
+# =========================
+# ADDRESS QUERIES
+# =========================
+
+extend type Query {
+  """
+  Get address by ID
+  Requires authentication
+  """
+  address(id: ID!): Address @auth
+  
+  """
+  Get all addresses for current user
+  Sorted by: default first, then last used
+  """
+  myAddresses: [Address!]! @auth
+  
+  """
+  Get default address for current user
+  """
+  myDefaultAddress: Address @auth
+  
+  """
+  Get smart address suggestions based on current time and usage patterns
+  Returns addresses most likely to be used right now
+  """
+  suggestedAddresses(limit: Int = 3): [AddressSuggestion!]! @auth
+  
+  """
+  Find nearest addresses to a given location
+  """
+  nearestAddresses(
+    latitude: Float!
+    longitude: Float!
+    limit: Int = 5
+  ): [Address!]! @auth
+  
+  """
+  Search addresses by city, state, or postal code
+  """
+  searchAddresses(input: AddressSearchInput!): AddressConnection! @auth
+  
+  """
+  Get address usage statistics
+  """
+  addressStats: AddressStats! @auth
 }

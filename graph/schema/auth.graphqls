@@ -1,34 +1,304 @@
-enum Provider {
+# ============================================================================
+# AUTHENTICATION
+# Social login, OTP authentication, and session management
+# ============================================================================
+
+# =========================
+# AUTHENTICATION TYPES
+# =========================
+
+"""
+AuthToken contains access and refresh tokens
+"""
+type AuthToken {
+  """Short-lived access token (15 minutes)"""
+  accessToken: String!
+  
+  """Long-lived refresh token (60 days)"""
+  refreshToken: String!
+  
+  """Access token expiration time"""
+  expiresAt: Time!
+  
+  """Token type (always "Bearer")"""
+  tokenType: String!
+}
+
+"""
+AuthResponse returned after successful authentication
+"""
+type AuthResponse {
+  """Authentication tokens"""
+  tokens: AuthToken!
+  
+  """Authenticated user"""
+  user: User!
+  
+  """Whether this is a new user"""
+  isNewUser: Boolean!
+  
+  """Additional flags"""
+  needsPhone: Boolean
+  needsKYC: Boolean
+}
+
+"""
+OTPResponse after requesting OTP
+"""
+type OTPResponse {
+  """Whether OTP was sent successfully"""
+  success: Boolean!
+  
+  """Message for the user"""
+  message: String!
+  
+  """Target (phone/email) where OTP was sent"""
+  target: String!
+  
+  """OTP expiration time"""
+  expiresAt: Time!
+  
+  """Remaining attempts before rate limit"""
+  remainingAttempts: Int
+}
+
+"""
+Session represents an active user session
+"""
+type Session {
+  """Session ID"""
+  id: ID!
+  
+  """Device type"""
+  device: DeviceType!
+  
+  """Device information"""
+  deviceInfo: JSON
+  
+  """Last activity timestamp"""
+  lastUsedAt: Time!
+  
+  """Session creation time"""
+  createdAt: Time!
+  
+  """Session expiration time"""
+  expiresAt: Time!
+  
+  """Whether session is currently active"""
+  isActive: Boolean!
+}
+
+# =========================
+# AUTHENTICATION ENUMS
+# =========================
+
+"""
+Social login providers
+"""
+enum AuthProvider {
   GOOGLE
   APPLE
+  PHONE
+  EMAIL
 }
 
-enum DeviceType {
-  MOBILE
-  WEB
-  DESKTOP
+"""
+OTP purpose
+"""
+enum OTPPurpose {
+  LOGIN
+  VERIFICATION
+  PASSWORD_RESET
+  ORDER_PICKUP
+  ORDER_DELIVERY
 }
 
-type AuthPayload {
-  accessToken: String!
+# =========================
+# AUTHENTICATION INPUTS
+# =========================
+
+"""
+Input for social login (Google/Apple)
+"""
+input SocialLoginInput {
+  """Provider (GOOGLE or APPLE)"""
+  provider: AuthProvider!
+  
+  """User ID from the provider"""
+  providerID: String!
+  
+  """Email address from provider"""
+  email: String!
+  
+  """First name"""
+  firstName: String!
+  
+  """Last name"""
+  lastName: String!
+  
+  """Profile picture URL"""
+  profilePic: String
+  
+  """Device type"""
+  deviceType: DeviceType!
+  
+  """Additional device information"""
+  deviceInfo: JSON
+}
+
+"""
+Input for requesting OTP
+"""
+input RequestOTPInput {
+  """Phone number (international format)"""
+  phone: String!
+  
+  """Purpose of the OTP"""
+  purpose: OTPPurpose!
+}
+
+"""
+Input for verifying OTP and logging in
+"""
+input VerifyOTPInput {
+  """Phone number"""
+  phone: String!
+  
+  """6-digit OTP code"""
+  code: String!
+  
+  """Purpose of verification"""
+  purpose: OTPPurpose!
+  
+  """Device type"""
+  deviceType: DeviceType!
+  
+  """Additional device information"""
+  deviceInfo: JSON
+}
+
+"""
+Input for refreshing access token
+"""
+input RefreshTokenInput {
+  """Refresh token"""
   refreshToken: String!
-  userId: Int!
-  role: String!
 }
 
-extend type Query {
-  health: String!
+"""
+Input for adding phone to customer account
+"""
+input AddPhoneInput {
+  """Phone number to add"""
+  phone: String!
 }
+
+"""
+Input for verifying added phone
+"""
+input VerifyPhoneInput {
+  """Phone number"""
+  phone: String!
+  
+  """Verification code"""
+  code: String!
+}
+
+"""
+Input for becoming a captain
+"""
+input BecomeCaptainInput {
+  """Phone number (if not already present)"""
+  phone: String
+}
+
+# =========================
+# AUTHENTICATION MUTATIONS
+# =========================
 
 extend type Mutation {
-  # Social authentication
-  socialLogin(provider: Provider!, providerToken: String!): AuthPayload!
+  # ===== CUSTOMER AUTHENTICATION =====
+  
+  """
+  Social login with Google/Apple
+  Creates new account if user doesn't exist
+  """
+  socialLogin(input: SocialLoginInput!): AuthResponse!
+  
+  # ===== CAPTAIN AUTHENTICATION =====
+  
+  """
+  Request OTP for phone verification
+  Rate limited: 3 requests per hour
+  """
+  requestOTP(input: RequestOTPInput!): OTPResponse! @rateLimit(limit: 3, window: 3600)
+  
+  """
+  Verify OTP and login
+  Creates new captain account if needed
+  Rate limited: 5 attempts per 15 minutes
+  """
+  verifyOTP(input: VerifyOTPInput!): AuthResponse! @rateLimit(limit: 5, window: 900)
+  
+  # ===== TOKEN MANAGEMENT =====
+  
+  """
+  Refresh access token using refresh token
+  """
+  refreshToken(input: RefreshTokenInput!): AuthToken!
+  
+  """
+  Logout and revoke refresh token
+  Requires authentication
+  """
+  logout: Boolean! @auth
+  
+  """
+  Logout from all devices
+  Revokes all refresh tokens
+  """
+  logoutAll: Boolean! @auth
+  
+  # ===== PHONE MANAGEMENT =====
+  
+  """
+  Add phone number to customer account
+  Triggers OTP verification
+  """
+  addPhone(input: AddPhoneInput!): OTPResponse! @auth
+  
+  """
+  Verify added phone number
+  """
+  verifyPhone(input: VerifyPhoneInput!): Boolean! @auth
+  
+  # ===== ROLE MANAGEMENT =====
+  
+  """
+  Convert customer to captain
+  Requires phone verification and KYC
+  """
+  becomeCaptain(input: BecomeCaptainInput!): User! @auth
+}
 
-  # OTP authentication
-  sendOtp(target: String!, purpose: String!): Boolean!
-  verifyOtp(target: String!, code: String!, purpose: String!): AuthPayload!
+# =========================
+# AUTHENTICATION QUERIES
+# =========================
 
-  # Session management
-  refreshToken(refresh: String!, device: DeviceType!): AuthPayload!
-  logout(refreshToken: String!): Boolean!
+extend type Query {
+  """
+  Get current authenticated user
+  Returns null if not authenticated
+  """
+  me: User @auth
+  
+  """
+  Get all active sessions for current user
+  """
+  mySessions: [Session!]! @auth
+  
+  """
+  Verify if access token is valid
+  """
+  verifyToken(token: String!): Boolean!
 }
