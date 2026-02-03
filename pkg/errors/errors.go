@@ -6,6 +6,7 @@ import "fmt"
 type ErrorCode string
 
 const (
+	// Generic codes
 	// Authentication & Authorization Errors
 	CodeUnauthorized       ErrorCode = "UNAUTHORIZED"
 	CodeForbidden          ErrorCode = "FORBIDDEN"
@@ -15,6 +16,8 @@ const (
 	CodeInvalidOTP         ErrorCode = "INVALID_OTP"
 	CodeOTPExpired         ErrorCode = "OTP_EXPIRED"
 	CodeMaxOTPAttempts     ErrorCode = "MAX_OTP_ATTEMPTS"
+	CodeBadRequest          ErrorCode = "BAD_REQUEST"
+	CodeConflict            ErrorCode = "CONFLICT"
 
 	// Validation Errors
 	CodeValidationFailed     ErrorCode = "VALIDATION_FAILED"
@@ -52,6 +55,22 @@ const (
 	CodeTimeout            ErrorCode = "TIMEOUT"
 	CodeDatabaseError      ErrorCode = "DATABASE_ERROR"
 	CodeCacheError         ErrorCode = "CACHE_ERROR"
+
+	// Order codes
+	CodeInvalidOrderState   ErrorCode = "INVALID_ORDER_STATE"
+	CodeOrderNotFound       ErrorCode = "ORDER_NOT_FOUND"
+	CodeSelfAssignment      ErrorCode = "SELF_ASSIGNMENT_NOT_ALLOWED"
+	CodeCannotCancel        ErrorCode = "CANNOT_CANCEL_ORDER"
+	
+	// Captain codes
+	CodeCaptainNotAvailable ErrorCode = "CAPTAIN_NOT_AVAILABLE"
+	CodeCaptainNotVerified  ErrorCode = "CAPTAIN_NOT_VERIFIED"
+	CodeCaptainBusy         ErrorCode = "CAPTAIN_HAS_ACTIVE_ORDER"
+	
+	// Payment codes
+	CodeInsufficientFunds   ErrorCode = "INSUFFICIENT_WALLET_BALANCE"
+	CodePaymentFailed       ErrorCode = "PAYMENT_FAILED"
+
 )
 
 // AppError is the base error type for application errors
@@ -178,6 +197,31 @@ func ErrMaxOTPAttempts() *AppError {
 		"Maximum OTP verification attempts exceeded",
 		429,
 	)
+}
+
+// ============================================================================
+// ORDER ERRORS
+// ============================================================================
+
+func ErrOrderNotFound(orderID string) *AppError {
+	return &AppError{
+		Code:    CodeOrderNotFound,
+		Message: "Order not found",
+		Details: map[string]interface{}{
+			"orderID": orderID,
+		},
+	}
+}
+
+func ErrInvalidOrderState(current, expected string) *AppError {
+	return &AppError{
+		Code:    CodeInvalidOrderState,
+		Message: "Order is in invalid state for this operation",
+		Details: map[string]interface{}{
+			"currentState":  current,
+			"expectedState": expected,
+		},
+	}
 }
 
 // ============================================================================

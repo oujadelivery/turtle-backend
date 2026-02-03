@@ -1,0 +1,776 @@
+# ============================================================================
+# ORDER TYPES
+# ============================================================================
+
+"""
+Order represents a delivery or ride order
+"""
+type Order {
+  """
+  Order ID
+  """
+  id: ID!
+
+  """
+  Order version for optimistic locking
+  """
+  version: Int!
+
+  """
+  Type of order
+  """
+  orderType: OrderType!
+
+  """
+  User who booked the order
+  """
+  bookedBy: User!
+
+  """
+  Captain assigned to fulfill the order
+  """
+  assignedCaptain: User
+
+  """
+  Sender details (may not be a registered user)
+  """
+  sender: DeliveryContact!
+
+  """
+  Receiver details (may not be a registered user)
+  """
+  receiver: DeliveryContact!
+
+  """
+  Pickup address details
+  """
+  pickupAddress: OrderAddress!
+
+  """
+  Delivery address details
+  """
+  deliveryAddress: OrderAddress!
+
+  """
+  Parcel details (for parcel orders)
+  """
+  parcel: Parcel
+
+  """
+  Pricing breakdown
+  """
+  pricing: PricingBreakdown!
+
+  """
+  Current order state
+  """
+  state: OrderState!
+
+  """
+  State history for audit trail
+  """
+  stateHistory: [OrderStateTransition!]!
+
+  """
+  When state was last updated
+  """
+  stateUpdatedAt: Time!
+
+  """
+  Pickup OTP (only visible to sender and captain)
+  """
+  pickupOTP: String @auth
+
+  """
+  Delivery OTP (only visible to receiver and captain)
+  """
+  deliveryOTP: String @auth
+
+  """
+  When OTPs expire
+  """
+  otpExpiresAt: Time
+
+  """
+  Scheduled pickup time (for scheduled orders)
+  """
+  scheduledPickupTime: Time
+
+  """
+  Actual pickup time
+  """
+  actualPickupTime: Time
+
+  """
+  Estimated delivery time
+  """
+  estimatedDelivery: Time
+
+  """
+  Actual delivery time
+  """
+  actualDeliveryTime: Time
+
+  """
+  Waiting charges if applicable
+  """
+  waitingMinutes: Int!
+  waitingCharges: Money
+
+  """
+  Cancellation information
+  """
+  cancellationInfo: CancellationInfo
+
+  """
+  Payment method
+  """
+  paymentMethod: PaymentMethod!
+
+  """
+  Payment status
+  """
+  paymentStatus: PaymentStatus!
+
+  """
+  Notes from customer
+  """
+  customerNotes: String
+
+  """
+  Notes from captain
+  """
+  captainNotes: String
+
+  """
+  Order timestamps
+  """
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+"""
+Order type enumeration
+"""
+enum OrderType {
+  """
+  Parcel delivery
+  """
+  PARCEL
+
+  """
+  Ride (future)
+  """
+  RIDE
+
+  """
+  Multi-stop delivery (future)
+  """
+  MULTI_STOP
+
+  """
+  Scheduled order (future)
+  """
+  SCHEDULED
+}
+
+"""
+Order state enumeration
+"""
+enum OrderState {
+  CREATED
+  PRICE_ESTIMATED
+  SEARCHING_CAPTAIN
+  CAPTAIN_ASSIGNED
+  CAPTAIN_ACCEPTED
+  CAPTAIN_EN_ROUTE
+  PICKED_UP
+  IN_TRANSIT
+  AT_DELIVERY
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+"""
+State transition for audit trail
+"""
+type OrderStateTransition {
+  """
+  Previous state
+  """
+  fromState: OrderState!
+
+  """
+  New state
+  """
+  toState: OrderState!
+
+  """
+  User who triggered the transition
+  """
+  triggeredBy: User!
+
+  """
+  Reason for transition
+  """
+  reason: String
+
+  """
+  When transition occurred
+  """
+  timestamp: Time!
+}
+
+"""
+Delivery contact (sender or receiver)
+"""
+type DeliveryContact {
+  """
+  Contact name
+  """
+  name: String!
+
+  """
+  Contact phone number
+  """
+  phone: String!
+
+  """
+  Alternate phone number
+  """
+  alternatePhone: String
+
+  """
+  Special instructions or notes
+  """
+  notes: String
+}
+
+"""
+Order address details
+"""
+type OrderAddress {
+  """
+  Address line 1
+  """
+  addressLine1: String!
+
+  """
+  Address line 2
+  """
+  addressLine2: String
+
+  """
+  Landmark
+  """
+  landmark: String
+
+  """
+  City
+  """
+  city: String!
+
+  """
+  State
+  """
+  state: String!
+
+  """
+  Postal code
+  """
+  postalCode: String
+
+  """
+  Geographic location
+  """
+  location: Location!
+
+  """
+  Formatted address string
+  """
+  formattedAddress: String!
+}
+
+"""
+Pricing breakdown
+"""
+type PricingBreakdown {
+  """
+  Base price
+  """
+  basePrice: Money!
+
+  """
+  Distance-based price
+  """
+  distancePrice: Money!
+
+  """
+  Weight-based price
+  """
+  weightPrice: Money
+
+  """
+  Surge multiplier
+  """
+  surgeMultiplier: Float!
+
+  """
+  Surge amount
+  """
+  surgeAmount: Money!
+
+  """
+  Waiting charges
+  """
+  waitingCharges: Money!
+
+  """
+  Insurance fee
+  """
+  insuranceFee: Money!
+
+  """
+  Platform commission
+  """
+  platformCommission: Money!
+
+  """
+  Discount amount
+  """
+  discountAmount: Money!
+
+  """
+  Subtotal before additions
+  """
+  subtotal: Money!
+
+  """
+  Total amount
+  """
+  total: Money!
+
+  """
+  Captain's earning
+  """
+  captainEarning: Money!
+
+  """
+  Distance in kilometers
+  """
+  distanceKm: Float!
+
+  """
+  Estimated delivery time in minutes
+  """
+  estimatedMinutes: Int!
+}
+
+"""
+Cancellation information
+"""
+type CancellationInfo {
+  """
+  User who cancelled
+  """
+  cancelledBy: User!
+
+  """
+  Role of canceller
+  """
+  cancelledByRole: String!
+
+  """
+  Cancellation reason
+  """
+  reason: String!
+
+  """
+  Refund amount
+  """
+  refundAmount: Money
+
+  """
+  Penalty amount
+  """
+  penaltyAmount: Money
+
+  """
+  When cancelled
+  """
+  cancelledAt: Time!
+}
+
+"""
+Payment method enumeration
+"""
+enum PaymentMethod {
+  CASH
+  WALLET
+  ONLINE
+}
+
+"""
+Payment status enumeration
+"""
+enum PaymentStatus {
+  PENDING
+  CAPTURED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+# ============================================================================
+# ORDER QUERIES
+# ============================================================================
+
+extend type Query {
+  """
+  Get order by ID
+  """
+  order(id: ID!): Order @auth
+
+  """
+  Get my orders (as customer)
+  """
+  myOrders(limit: Int = 20, offset: Int = 0): OrderConnection! @auth
+
+  """
+  Get my captain orders (as captain)
+  """
+  myCaptainOrders(limit: Int = 20, offset: Int = 0): OrderConnection! @auth
+
+  """
+  Get active order (customer's current ongoing order)
+  """
+  myActiveOrder: Order @auth
+
+  """
+  Get captain's active order (order currently being fulfilled)
+  """
+  captainActiveOrder: Order @auth
+}
+
+"""
+Order connection for pagination
+"""
+type OrderConnection {
+  """
+  List of orders
+  """
+  orders: [Order!]!
+
+  """
+  Total count
+  """
+  totalCount: Int!
+
+  """
+  Has more results
+  """
+  hasMore: Boolean!
+}
+
+# ============================================================================
+# ORDER MUTATIONS
+# ============================================================================
+
+extend type Mutation {
+  """
+  Create a new order
+  """
+  createOrder(input: CreateOrderInput!): CreateOrderPayload! @auth
+
+  """
+  Estimate price for order (before creating)
+  """
+  estimateOrderPrice(input: EstimatePriceInput!): PricingBreakdown! @auth
+
+  """
+  Captain accepts assigned order
+  """
+  captainAcceptOrder(orderID: ID!): Order! @auth
+
+  """
+  Captain declines assigned order
+  """
+  captainDeclineOrder(orderID: ID!, reason: String!): Boolean! @auth
+
+  """
+  Captain marks en route to pickup
+  """
+  captainEnRoute(orderID: ID!): Order! @auth
+
+  """
+  Confirm parcel pickup with OTP
+  """
+  confirmPickup(orderID: ID!, otp: String!): Order! @auth
+
+  """
+  Start transit to delivery
+  """
+  startTransit(orderID: ID!): Order! @auth
+
+  """
+  Mark arrived at delivery location
+  """
+  arriveAtDelivery(orderID: ID!): Order! @auth
+
+  """
+  Confirm parcel delivery with OTP
+  """
+  confirmDelivery(orderID: ID!, otp: String!): Order! @auth
+
+  """
+  Complete order (system/admin)
+  """
+  completeOrder(orderID: ID!): Order! @auth
+
+  """
+  Cancel order
+  """
+  cancelOrder(orderID: ID!, reason: String!): Order! @auth
+
+  """
+  Admin force cancel order
+  """
+  adminCancelOrder(orderID: ID!, reason: String!): Order! @auth(role: "ADMIN")
+
+  """
+  Start waiting timer
+  """
+  startWaiting(orderID: ID!): Order! @auth
+
+  """
+  End waiting timer
+  """
+  endWaiting(orderID: ID!): Order! @auth
+
+  """
+  Add captain notes to order
+  """
+  addCaptainNotes(orderID: ID!, notes: String!): Order! @auth
+}
+
+# ============================================================================
+# ORDER INPUTS
+# ============================================================================
+
+"""
+Input for creating an order
+"""
+input CreateOrderInput {
+  """
+  Order type
+  """
+  orderType: OrderType!
+
+  """
+  Sender details
+  """
+  sender: DeliveryContactInput!
+
+  """
+  Receiver details
+  """
+  receiver: DeliveryContactInput!
+
+  """
+  Pickup address
+  """
+  pickupAddress: OrderAddressInput!
+
+  """
+  Delivery address
+  """
+  deliveryAddress: OrderAddressInput!
+
+  """
+  Parcel details (required for parcel orders)
+  """
+  parcel: ParcelInput
+
+  """
+  Payment method
+  """
+  paymentMethod: PaymentMethod!
+
+  """
+  Customer notes
+  """
+  customerNotes: String
+
+  """
+  Scheduled pickup time (optional)
+  """
+  scheduledPickupTime: Time
+}
+
+"""
+Input for delivery contact
+"""
+input DeliveryContactInput {
+  """
+  Contact name
+  """
+  name: String!
+
+  """
+  Contact phone
+  """
+  phone: String!
+
+  """
+  Alternate phone
+  """
+  alternatePhone: String
+
+  """
+  Special instructions
+  """
+  notes: String
+}
+
+"""
+Input for order address
+"""
+input OrderAddressInput {
+  """
+  Address line 1
+  """
+  addressLine1: String!
+
+  """
+  Address line 2
+  """
+  addressLine2: String
+
+  """
+  Landmark
+  """
+  landmark: String
+
+  """
+  City
+  """
+  city: String!
+
+  """
+  State
+  """
+  state: String!
+
+  """
+  Postal code
+  """
+  postalCode: String
+
+  """
+  Location coordinates
+  """
+  location: LocationInput!
+}
+
+"""
+Input for parcel details
+"""
+input ParcelInput {
+  """
+  Parcel type
+  """
+  type: ParcelType!
+
+  """
+  Weight in kg
+  """
+  weight: Float!
+
+  """
+  Description
+  """
+  description: String
+
+  """
+  Declared value in paise
+  """
+  valuePaise: Int
+
+  """
+  Image URLs
+  """
+  images: [String!]
+}
+
+"""
+Parcel type enumeration
+"""
+enum ParcelType {
+  DOCUMENT
+  PACKAGE
+  FOOD
+  FRAGILE
+  ELECTRONICS
+  CLOTHING
+  GROCERIES
+  MEDICINES
+  OTHER
+}
+
+"""
+Input for price estimation
+"""
+input EstimatePriceInput {
+  """
+  Pickup location
+  """
+  pickupLocation: LocationInput!
+
+  """
+  Delivery location
+  """
+  deliveryLocation: LocationInput!
+
+  """
+  Parcel details (optional)
+  """
+  parcel: ParcelInput
+}
+
+"""
+Payload for createOrder mutation
+"""
+type CreateOrderPayload {
+  """
+  Created order
+  """
+  order: Order!
+
+  """
+  Pickup OTP (for sender)
+  """
+  pickupOTP: String!
+
+  """
+  Delivery OTP (for receiver)
+  """
+  deliveryOTP: String!
+}
+
+# ============================================================================
+# ORDER SUBSCRIPTIONS
+# ============================================================================
+
+extend type Subscription {
+  """
+  Subscribe to order state changes
+  """
+  orderStateChanged(orderID: ID!): Order! @auth
+
+  """
+  Subscribe to captain location updates (for customers tracking their order)
+  """
+  orderCaptainLocation(orderID: ID!): Location! @auth
+}

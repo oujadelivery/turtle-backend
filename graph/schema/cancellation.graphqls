@@ -1,0 +1,276 @@
+# ============================================================================
+# CANCELLATION & PENALTY TYPES
+# ============================================================================
+
+"""
+User penalty and reward points
+"""
+type UserPenalty {
+  """
+  User ID
+  """
+  userID: ID!
+
+  """
+  Total penalty points accumulated
+  """
+  totalPenaltyPoints: Int!
+
+  """
+  Total reward points earned
+  """
+  totalRewardPoints: Int!
+
+  """
+  Net score (rewards - penalties)
+  """
+  netScore: Int!
+
+  """
+  Is user currently suspended
+  """
+  isSuspended: Boolean!
+
+  """
+  Suspension end time
+  """
+  suspensionUntil: Time
+
+  """
+  Last penalty timestamp
+  """
+  lastPenaltyAt: Time
+
+  """
+  Last reward timestamp
+  """
+  lastRewardAt: Time
+
+  """
+  Created at
+  """
+  createdAt: Time!
+
+  """
+  Updated at
+  """
+  updatedAt: Time!
+}
+
+"""
+Cancellation event record
+"""
+type CancellationEvent {
+  """
+  Event ID
+  """
+  id: ID!
+
+  """
+  Order that was cancelled
+  """
+  order: Order!
+
+  """
+  User who cancelled
+  """
+  user: User!
+
+  """
+  Role of canceller
+  """
+  cancelledByRole: String!
+
+  """
+  Order state when cancelled
+  """
+  orderStateAtCancellation: String!
+
+  """
+  Cancellation reason
+  """
+  reason: String!
+
+  """
+  Refund amount
+  """
+  refundAmount: Money
+
+  """
+  Penalty amount
+  """
+  penaltyAmount: Money
+
+  """
+  Penalty points applied
+  """
+  penaltyPoints: Int!
+
+  """
+  When cancelled
+  """
+  createdAt: Time!
+}
+
+"""
+Cancellation statistics
+"""
+type CancellationStats {
+  """
+  Total cancellations
+  """
+  totalCancellations: Int!
+
+  """
+  Customer cancellations
+  """
+  customerCancellations: Int!
+
+  """
+  Captain cancellations
+  """
+  captainCancellations: Int!
+
+  """
+  Recent cancellations (last 30 days)
+  """
+  recentCancellations: Int!
+
+  """
+  Total penalty points from cancellations
+  """
+  totalPenaltyPoints: Int!
+}
+
+"""
+Cancellation result
+"""
+type CancelOrderResult {
+  """
+  Cancelled order
+  """
+  order: Order!
+
+  """
+  Refund amount
+  """
+  refundAmount: Money!
+
+  """
+  Refund percentage
+  """
+  refundPercentage: Int!
+
+  """
+  Penalty amount
+  """
+  penaltyAmount: Money!
+
+  """
+  Penalty points applied
+  """
+  penaltyPoints: Int!
+
+  """
+  Was refund processed automatically
+  """
+  wasAutoRefunded: Boolean!
+
+  """
+  Message explaining the outcome
+  """
+  message: String!
+}
+
+# ============================================================================
+# QUERIES
+# ============================================================================
+
+extend type Query {
+  """
+  Get current user's penalty record
+  """
+  myPenalty: UserPenalty! @auth
+
+  """
+  Get cancellation history
+  """
+  myCancellationHistory(
+    limit: Int = 20
+    offset: Int = 0
+  ): [CancellationEvent!]! @auth
+
+  """
+  Get cancellation statistics
+  """
+  myCancellationStats: CancellationStats! @auth
+
+  """
+  Admin: View user's penalty details
+  """
+  adminUserPenalty(userID: ID!): UserPenaltyDetails! @auth(role: "ADMIN")
+}
+
+"""
+User penalty details (admin view)
+"""
+type UserPenaltyDetails {
+  """
+  Penalty record
+  """
+  penalty: UserPenalty!
+
+  """
+  Cancellation history
+  """
+  cancellationHistory: [CancellationEvent!]!
+
+  """
+  Statistics
+  """
+  stats: CancellationStats!
+}
+
+# ============================================================================
+# MUTATIONS
+# ============================================================================
+
+extend type Mutation {
+  """
+  Cancel order (enhanced with detailed result)
+  """
+  cancelOrderDetailed(orderID: ID!, reason: String!): CancelOrderResult! @auth
+
+  """
+  Admin: Cancel order without penalty
+  """
+  adminCancelOrderNoPenalty(orderID: ID!, reason: String!): CancelOrderResult!
+    @auth(role: "ADMIN")
+
+  """
+  Admin: Reset user penalty points
+  """
+  adminResetPenalty(userID: ID!, reason: String!): UserPenalty!
+    @auth(role: "ADMIN")
+
+  """
+  Admin: Manually adjust penalty/reward points
+  """
+  adminAdjustPoints(
+    userID: ID!
+    penaltyAdjustment: Int!
+    rewardAdjustment: Int!
+    reason: String!
+  ): UserPenalty! @auth(role: "ADMIN")
+
+  """
+  Admin: Suspend user
+  """
+  adminSuspendUser(userID: ID!, reason: String!, durationHours: Int!): User!
+    @auth(role: "ADMIN")
+
+  """
+  Admin: Unsuspend user
+  """
+  adminUnsuspendUser(userID: ID!, reason: String!): User! @auth(role: "ADMIN")
+}
